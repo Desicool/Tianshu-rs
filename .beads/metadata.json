@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "workflow_engine",
+  "project_id": "a70c9773-1f95-4ebe-8129-1c90cb4e7070"
+}

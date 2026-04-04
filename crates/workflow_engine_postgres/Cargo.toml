@@ -1,0 +1,23 @@
+[package]
+name = "workflow_engine_postgres"
+version = "0.1.0"
+edition = "2021"
+description = "PostgreSQL CaseStore + StateStore adapter for workflow-engine"
+
+[dependencies]
+workflow_engine = { path = "../workflow_engine" }
+tokio-postgres = { workspace = true }
+deadpool-postgres = { workspace = true }
+native-tls = "0.2"
+tokio-native-tls = "0.3"
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+uuid = { workspace = true }

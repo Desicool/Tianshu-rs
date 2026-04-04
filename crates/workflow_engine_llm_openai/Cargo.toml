@@ -1,0 +1,15 @@
+[package]
+name = "workflow_engine_llm_openai"
+version = "0.1.0"
+edition = "2021"
+description = "OpenAI-compatible LlmProvider adapter for workflow-engine"
+
+[dependencies]
+workflow_engine = { path = "../workflow_engine" }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+async-trait = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true }

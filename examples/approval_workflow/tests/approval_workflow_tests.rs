@@ -3,7 +3,7 @@ use std::sync::Arc;
 use workflow_engine::{
     case::{Case, ExecutionState},
     engine::{SchedulerEnvironment, SchedulerV2},
-    store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateStore},
+    store::{InMemoryCaseStore, InMemoryStateStore},
     WorkflowRegistry,
 };
 
@@ -39,6 +39,7 @@ async fn tick(
             registry,
             cs as Arc<dyn workflow_engine::store::CaseStore>,
             ss as Arc<dyn workflow_engine::store::StateStore>,
+            None,
             None,
         )
         .await

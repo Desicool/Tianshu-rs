@@ -12,7 +12,10 @@ pub mod workflow;
 // Re-exports
 pub use case::{make_case, Case, ExecutionState};
 pub use context::WorkflowContext;
-pub use engine::{SchedulerEnvironment, SchedulerV2};
+pub use engine::{
+    shutdown_signal, ExecutionMode, SchedulerEnvironment, SchedulerV2, ShutdownSignal,
+    ShutdownTrigger, TickResult,
+};
 pub use llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage};
 pub use observe::{
     observe_llm_call, LlmCallRecord, ObservedLlmProvider, Observer, StepRecord, WorkflowRecord,

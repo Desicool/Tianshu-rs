@@ -6,12 +6,29 @@ use std::time::Duration;
 use crate::tool::{Tool, ToolSafety};
 
 pub struct ShellCommandTool {
-    pub timeout_secs: u64,
+    timeout_secs: u64,
+}
+
+impl ShellCommandTool {
+    /// Create a `ShellCommandTool` with the default 30-second timeout.
+    pub fn new() -> Self {
+        Self { timeout_secs: 30 }
+    }
+
+    /// Create a `ShellCommandTool` with a custom timeout.
+    ///
+    /// `secs` is clamped to a minimum of 1 second so that a zero value never
+    /// causes an immediate timeout.
+    pub fn with_timeout(secs: u64) -> Self {
+        Self {
+            timeout_secs: secs.max(1),
+        }
+    }
 }
 
 impl Default for ShellCommandTool {
     fn default() -> Self {
-        Self { timeout_secs: 30 }
+        Self::new()
     }
 }
 
@@ -116,7 +133,7 @@ mod tests {
 
     #[tokio::test]
     async fn shell_command_timeout_returns_error() {
-        let tool = ShellCommandTool { timeout_secs: 1 };
+        let tool = ShellCommandTool::with_timeout(1);
         let err = tool
             .execute(json!({"command": "sleep 10"}))
             .await

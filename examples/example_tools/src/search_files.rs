@@ -1,8 +1,11 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use serde_json::{json, Value as JsonValue};
+use std::time::Duration;
 
 use crate::tool::{Tool, ToolSafety};
+
+const SEARCH_TIMEOUT_SECS: u64 = 30;
 
 pub struct SearchFilesTool;
 
@@ -45,11 +48,17 @@ impl Tool for SearchFilesTool {
             .as_str()
             .context("missing required field: path")?;
 
-        let output = tokio::process::Command::new("grep")
-            .args(["-rn", "--include=*", pattern, path])
-            .output()
-            .await
-            .context("failed to run grep")?;
+        let output = tokio::time::timeout(
+            Duration::from_secs(SEARCH_TIMEOUT_SECS),
+            tokio::process::Command::new("grep")
+                .args(["-rn", "--include=*", pattern, path])
+                .output(),
+        )
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!("search timed out after {} seconds", SEARCH_TIMEOUT_SECS)
+        })?
+        .context("failed to run grep")?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         if stdout.trim().is_empty() {

@@ -55,15 +55,20 @@ impl ToolRegistry {
     }
 
     /// Convert all registered tools to `LlmTool` definitions for API requests.
+    ///
+    /// Results are sorted by tool name for deterministic ordering.
     pub fn to_llm_tools(&self) -> Vec<LlmTool> {
-        self.tools
+        let mut tools: Vec<LlmTool> = self
+            .tools
             .values()
             .map(|t| LlmTool {
                 name: t.name().to_string(),
                 description: t.description().to_string(),
                 input_schema: t.input_schema(),
             })
-            .collect()
+            .collect();
+        tools.sort_by(|a, b| a.name.cmp(&b.name));
+        tools
     }
 
     /// Execute a single tool call, returning a `ToolResult` (never panics).
@@ -99,46 +104,51 @@ impl ToolRegistry {
         let mut set: JoinSet<(usize, ToolResult)> = JoinSet::new();
 
         for (idx, call) in calls.iter().enumerate() {
-            let tool = match self.tools.get(&call.name) {
-                Some(t) => t.clone(),
-                None => {
-                    // Return an error result inline without spawning.
-                    let result = ToolResult {
-                        tool_use_id: call.id.clone(),
-                        content: format!("Unknown tool: {}", call.name),
-                        is_error: true,
-                    };
-                    set.spawn(async move { (idx, result) });
-                    continue;
-                }
-            };
-            let call = call.clone();
+            let tool = self.tools.get(&call.name).cloned();
+            let input = call.input.clone();
+            let call_id = call.id.clone();
+            let call_name = call.name.clone();
             set.spawn(async move {
-                let result = match tool.execute(call.input.clone()).await {
-                    Ok(output) => ToolResult {
-                        tool_use_id: call.id.clone(),
-                        content: output,
-                        is_error: false,
+                match tool {
+                    None => (
+                        idx,
+                        ToolResult {
+                            tool_use_id: call_id,
+                            content: format!("Unknown tool: {call_name}"),
+                            is_error: true,
+                        },
+                    ),
+                    Some(t) => match t.execute(input).await {
+                        Ok(output) => (
+                            idx,
+                            ToolResult {
+                                tool_use_id: call_id,
+                                content: output,
+                                is_error: false,
+                            },
+                        ),
+                        Err(e) => (
+                            idx,
+                            ToolResult {
+                                tool_use_id: call_id,
+                                content: format!("Tool error: {e}"),
+                                is_error: true,
+                            },
+                        ),
                     },
-                    Err(e) => ToolResult {
-                        tool_use_id: call.id.clone(),
-                        content: format!("Tool error: {e}"),
-                        is_error: true,
-                    },
-                };
-                (idx, result)
+                }
             });
         }
 
         let mut indexed: Vec<(usize, ToolResult)> = Vec::with_capacity(calls.len());
         while let Some(res) = set.join_next().await {
-            // JoinError means panic in task — propagate as error result.
+            // JoinError means panic in task — propagate as error result with
+            // a sentinel index that sorts to the end.
             match res {
                 Ok(pair) => indexed.push(pair),
                 Err(e) => {
-                    // We can't recover the original index here easily, so push at end.
                     indexed.push((
-                        calls.len(),
+                        usize::MAX,
                         ToolResult {
                             tool_use_id: String::new(),
                             content: format!("Task panicked: {e}"),
@@ -155,7 +165,19 @@ impl ToolRegistry {
 }
 
 /// Run the LLM tool-use loop until the model returns a non-tool response or
-/// `max_tool_rounds` is exhausted.
+/// `max_tool_rounds` tool invocations have been performed.
+///
+/// Invariant: tools are invoked at most `max_tool_rounds` times. After all
+/// tool rounds are exhausted, one final LLM call is made to synthesise an
+/// answer from the accumulated tool results.
+///
+/// If the model returns a non-tool response at any point the function returns
+/// immediately without waiting for remaining rounds.
+///
+/// Note: `request.tools` should be pre-populated with
+/// `registry.to_llm_tools()` before calling this function. If `request.tools`
+/// is `None`, this function will automatically populate it from the registry
+/// so that tool definitions are always present in every request.
 ///
 /// Returns `(final_text, message_history)`.
 pub async fn run_tool_loop(
@@ -164,15 +186,15 @@ pub async fn run_tool_loop(
     registry: &ToolRegistry,
     max_tool_rounds: usize,
 ) -> Result<(String, Vec<LlmMessage>)> {
-    for _round in 0..=max_tool_rounds {
+    // Ensure tool definitions are always present.
+    if request.tools.is_none() {
+        request.tools = Some(registry.to_llm_tools());
+    }
+
+    for _tool_round in 0..max_tool_rounds {
         let response = llm.complete(request.clone()).await?;
 
         if response.finish_reason != "tool_use" {
-            return Ok((response.content, request.messages));
-        }
-
-        // We hit the round cap — stop without executing tools.
-        if _round == max_tool_rounds {
             return Ok((response.content, request.messages));
         }
 
@@ -224,8 +246,10 @@ pub async fn run_tool_loop(
         request.messages.push(LlmMessage::tool_results(results));
     }
 
-    // Unreachable in normal usage but satisfies the compiler.
-    Ok((String::new(), request.messages))
+    // max_tool_rounds exhausted — make one final LLM call to synthesise an
+    // answer from the accumulated tool results.
+    let final_response = llm.complete(request.clone()).await?;
+    Ok((final_response.content, request.messages))
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -512,6 +536,74 @@ mod tests {
         assert_eq!(results[0].content, "tool_output");
     }
 
+    fn multi_tool_use_response(calls: Vec<(&str, &str, JsonValue)>) -> LlmResponse {
+        LlmResponse {
+            content: String::new(),
+            tool_calls: Some(
+                calls
+                    .into_iter()
+                    .map(|(name, id, input)| ToolCall {
+                        id: id.to_string(),
+                        name: name.to_string(),
+                        input,
+                    })
+                    .collect(),
+            ),
+            usage: LlmUsage {
+                prompt_tokens: 1,
+                completion_tokens: 1,
+            },
+            finish_reason: "tool_use".to_string(),
+        }
+    }
+
+    #[tokio::test]
+    async fn run_tool_loop_interleaved_safe_and_exclusive_results_in_order() {
+        // Register three tools: two safe (safe_a, safe_b) and one exclusive.
+        let mut reg = ToolRegistry::new();
+        reg.register(EchoTool {
+            name: "safe_a",
+            safety: ToolSafety::ConcurrentSafe,
+            reply: "result_a",
+        });
+        reg.register(EchoTool {
+            name: "exclusive",
+            safety: ToolSafety::Exclusive,
+            reply: "result_excl",
+        });
+        reg.register(EchoTool {
+            name: "safe_b",
+            safety: ToolSafety::ConcurrentSafe,
+            reply: "result_b",
+        });
+
+        // LLM returns all three tools in interleaved order: safe_a, exclusive, safe_b.
+        let llm = MockLlmProvider::new(vec![
+            multi_tool_use_response(vec![
+                ("safe_a", "id_a", json!({})),
+                ("exclusive", "id_excl", json!({})),
+                ("safe_b", "id_b", json!({})),
+            ]),
+            stop_response("All done"),
+        ]);
+
+        let (text, messages) = run_tool_loop(&llm, make_request(), &reg, 3)
+            .await
+            .unwrap();
+
+        assert_eq!(text, "All done");
+
+        // The tool_results message should preserve the original call order.
+        let tool_results = messages[2].tool_results.as_ref().expect("tool results");
+        assert_eq!(tool_results.len(), 3);
+        assert_eq!(tool_results[0].tool_use_id, "id_a");
+        assert_eq!(tool_results[0].content, "result_a");
+        assert_eq!(tool_results[1].tool_use_id, "id_excl");
+        assert_eq!(tool_results[1].content, "result_excl");
+        assert_eq!(tool_results[2].tool_use_id, "id_b");
+        assert_eq!(tool_results[2].content, "result_b");
+    }
+
     #[tokio::test]
     async fn run_tool_loop_stops_at_max_rounds() {
         let mut reg = ToolRegistry::new();
@@ -521,20 +613,19 @@ mod tests {
             reply: "ok",
         });
 
-        // LLM always returns tool_use — should stop after max_tool_rounds.
+        // LLM returns tool_use for both rounds, then a final stop response.
+        // With max=2: round 0 executes tools (c1), round 1 executes tools (c2),
+        // then one final synthesis call returns the stop response.
         let responses = vec![
             tool_use_response("echo", "c1", json!({})),
             tool_use_response("echo", "c2", json!({})),
-            tool_use_response("echo", "c3", json!({})),
+            stop_response("Synthesised answer"),
         ];
         let llm = MockLlmProvider::new(responses);
         let max = 2;
         let (text, _messages) = run_tool_loop(&llm, make_request(), &reg, max)
             .await
             .unwrap();
-        // After max_tool_rounds the last response content is returned.
-        // The loop executes tools for rounds 0 and 1, then on round 2 (== max)
-        // it returns without executing tools.
-        let _ = text; // just assert it completes without error
+        assert_eq!(text, "Synthesised answer");
     }
 }

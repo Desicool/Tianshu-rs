@@ -44,6 +44,14 @@ impl Tool for WriteFileTool {
         let content = input["content"]
             .as_str()
             .context("missing required field: content")?;
+        // Create parent directories if they don't already exist.
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            if !parent.as_os_str().is_empty() {
+                tokio::fs::create_dir_all(parent)
+                    .await
+                    .with_context(|| format!("failed to create parent directories for: {path}"))?;
+            }
+        }
         tokio::fs::write(path, content)
             .await
             .with_context(|| format!("failed to write file: {path}"))?;
@@ -93,6 +101,23 @@ mod tests {
 
         let written = tokio::fs::read_to_string(&path).await.unwrap();
         assert_eq!(written, "replaced");
+    }
+
+    #[tokio::test]
+    async fn write_file_creates_parent_directories() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let path = tmp_dir.path().join("nested/deep/file.txt");
+        let path_str = path.to_str().unwrap().to_string();
+
+        let tool = WriteFileTool;
+        let result = tool
+            .execute(json!({"path": path_str, "content": "nested content"}))
+            .await
+            .unwrap();
+
+        assert!(result.contains(&path_str));
+        let written = tokio::fs::read_to_string(&path).await.unwrap();
+        assert_eq!(written, "nested content");
     }
 
     #[tokio::test]

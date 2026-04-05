@@ -53,7 +53,9 @@ impl BaseWorkflow for ConversationWorkflow {
             None => return Ok(WorkflowResult::Waiting(vec![])),
         };
 
-        // 3. Avoid double-processing on replay.
+        // 3. Avoid re-processing the same message when the REPL re-ticks without
+        //    delivering new input (e.g. the engine probes the Waiting case and
+        //    resource_data still holds the previous message).
         let last_input: String = ctx.get_state("conv_last_input", String::new()).await?;
         if last_input == user_message {
             return Ok(WorkflowResult::Waiting(vec![]));

@@ -225,9 +225,11 @@ async fn workflow_handles_multi_turn() {
     register_workflows(&mut registry, llm_dyn, "mock-model".into());
 
     // Turn 1.
-    let case = make_case_with_message("conv_multi", "What is 2+2?");
     let (cs, ss) = make_stores();
-    let mut env = SchedulerEnvironment::from_session_id("s_multi", vec![case.clone()]);
+    let mut env = SchedulerEnvironment::from_session_id(
+        "s_multi",
+        vec![make_case_with_message("conv_multi", "What is 2+2?")],
+    );
     let mut sched = SchedulerV2::new();
 
     tick_once(
@@ -281,10 +283,64 @@ async fn workflow_handles_multi_turn() {
         .filter(|m| m.role == "user")
         .collect();
     assert!(user_msgs.len() >= 2, "Should have at least 2 user messages");
-    let _ = case; // suppress unused warning
 }
 
-/// Test 4: Workflow invokes a tool when requested.
+/// Test 4: Submitting the same message twice — the second tick should be ignored.
+/// The conv_messages history should not grow after the duplicate.
+#[tokio::test]
+async fn workflow_ignores_duplicate_message() {
+    // Only one LLM call should happen — the duplicate must not trigger a second.
+    let llm = MockLlmProvider::new(vec![stop_response("First reply.")]);
+    let llm_dyn: Arc<dyn workflow_engine::llm::LlmProvider> = llm;
+
+    let mut registry = WorkflowRegistry::new();
+    register_workflows(&mut registry, llm_dyn, "mock-model".into());
+
+    let case = make_case_with_message("conv_dup", "Hello!");
+    let (cs, ss) = make_stores();
+    let mut env = SchedulerEnvironment::from_session_id("s_dup", vec![case]);
+    let mut sched = SchedulerV2::new();
+
+    // First tick — processes the message.
+    tick_once(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
+
+    let messages_after_first = read_messages(&ss, "conv_dup").await;
+    assert_eq!(
+        messages_after_first.len(),
+        2,
+        "Should have user + assistant after first tick"
+    );
+
+    // Second tick with the SAME user_message — must be a no-op.
+    // (resource_data was not changed; same "Hello!" is still set)
+    tick_once(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
+
+    let messages_after_second = read_messages(&ss, "conv_dup").await;
+    assert_eq!(
+        messages_after_second.len(),
+        2,
+        "History should not grow after a duplicate message (got {})",
+        messages_after_second.len()
+    );
+    // If MockLlmProvider panics here it means a second LLM call was made —
+    // that would also prove the guard failed.
+}
+
+/// Test 5: Workflow invokes a tool when requested.
 #[tokio::test]
 async fn workflow_uses_tools_when_needed() {
     use std::io::Write as IoWrite;

@@ -123,7 +123,11 @@ async fn main() -> Result<()> {
         // Read the latest assistant message from state.
         if let Ok(Some(entry)) = state_store.get(case_key, "wf_state_conv_messages").await {
             let messages: Vec<LlmMessage> = serde_json::from_str(&entry.data).unwrap_or_default();
-            if let Some(last_asst) = messages.iter().rev().find(|m| m.role == "assistant") {
+            if let Some(last_asst) = messages
+            .iter()
+            .rev()
+            .find(|m| m.role == "assistant" && !m.content.is_empty())
+        {
                 println!("Agent: {}", last_asst.content);
             }
         }

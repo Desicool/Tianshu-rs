@@ -33,10 +33,8 @@ async fn main() -> Result<()> {
     tracing_subscriber::fmt().with_env_filter("info").init();
 
     // ── Configuration from environment ───────────────────────────────────────
-    let api_key =
-        std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "sk-placeholder".to_string());
-    let model =
-        std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+    let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "sk-placeholder".to_string());
+    let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
     let base_url = std::env::var("OPENAI_BASE_URL").ok();
 
     // ── Task from CLI args or default ─────────────────────────────────────────
@@ -157,10 +155,7 @@ async fn main() -> Result<()> {
     let wf_entries = workflow_dataset(&workflow_records);
     let llm_entries = llm_dataset(&llm_records);
 
-    info!(
-        "  RLHF-ready step entries: {}",
-        step_entries.len()
-    );
+    info!("  RLHF-ready step entries: {}", step_entries.len());
     info!("  RLHF-ready workflow entries: {}", wf_entries.len());
     info!("  RLHF-ready LLM call entries: {}", llm_entries.len());
 

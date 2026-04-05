@@ -118,7 +118,14 @@ async fn plan_is_generated_and_stored_as_checkpoint() {
     let mut sched = SchedulerV2::new();
 
     // Run the workflow to completion
-    tick(&mut sched, &mut env, &registry, Arc::clone(&cs), Arc::clone(&ss)).await;
+    tick(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
 
     // Verify workflow finished — this confirms the plan was generated and executed.
     // (ctx.finish() cleans up state store, so the checkpoint won't be present post-finish.)
@@ -226,7 +233,9 @@ async fn workflow_is_checkpoint_safe() {
     // After finish(), state is cleaned up. But if the workflow is still
     // running (not yet finished), the checkpoint should be present.
     // We check: either checkpoint exists (partial run) OR workflow finished.
-    let case_state = env1.current_case_dict["pae_ckpt_safe"].execution_state.clone();
+    let case_state = env1.current_case_dict["pae_ckpt_safe"]
+        .execution_state
+        .clone();
 
     if case_state == ExecutionState::Finished {
         // Workflow fully completed in first run — checkpoint was cleaned up,

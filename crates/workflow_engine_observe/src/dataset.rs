@@ -46,10 +46,7 @@ pub fn step_dataset(records: &[StepRecord]) -> Vec<DatasetEntry> {
         .iter()
         .filter(|r| !r.cached && r.output.is_some() && r.error.is_none())
         .map(|r| {
-            let input = r
-                .input_resource_data
-                .clone()
-                .unwrap_or(JsonValue::Null);
+            let input = r.input_resource_data.clone().unwrap_or(JsonValue::Null);
             let output = r.output.clone().unwrap(); // safe: filtered above
             DatasetEntry {
                 input,

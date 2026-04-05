@@ -52,7 +52,9 @@ async fn tick(
 async fn approval_workflow_registered() {
     let mut registry = WorkflowRegistry::new();
     register_workflows(&mut registry);
-    assert!(registry.registered_codes().contains(&"approval".to_string()));
+    assert!(registry
+        .registered_codes()
+        .contains(&"approval".to_string()));
 }
 
 #[tokio::test]
@@ -83,7 +85,14 @@ async fn workflow_completes_approved() {
     let mut sched = SchedulerV2::new();
 
     // Tick 1: submit → waiting
-    tick(&mut sched, &mut env, &registry, Arc::clone(&cs), Arc::clone(&ss)).await;
+    tick(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
     assert_eq!(
         env.current_case_dict["case_approve"].execution_state,
         ExecutionState::Waiting
@@ -100,7 +109,14 @@ async fn workflow_completes_approved() {
     }
 
     // Tick 2: decision found → approved → finished
-    tick(&mut sched, &mut env, &registry, Arc::clone(&cs), Arc::clone(&ss)).await;
+    tick(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
 
     let final_case = &env.current_case_dict["case_approve"];
     assert_eq!(final_case.execution_state, ExecutionState::Finished);
@@ -118,7 +134,14 @@ async fn workflow_completes_rejected() {
     let mut sched = SchedulerV2::new();
 
     // Tick 1: submit → waiting
-    tick(&mut sched, &mut env, &registry, Arc::clone(&cs), Arc::clone(&ss)).await;
+    tick(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
 
     // Inject rejection
     if let Some(c) = env.current_case_dict.get_mut("case_reject") {
@@ -130,7 +153,14 @@ async fn workflow_completes_rejected() {
     }
 
     // Tick 2: rejection processed
-    tick(&mut sched, &mut env, &registry, Arc::clone(&cs), Arc::clone(&ss)).await;
+    tick(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
 
     let final_case = &env.current_case_dict["case_reject"];
     assert_eq!(final_case.execution_state, ExecutionState::Finished);
@@ -151,7 +181,14 @@ async fn workflow_stays_waiting_without_decision() {
     let mut env = SchedulerEnvironment::new("s4", vec![case]);
     let mut sched = SchedulerV2::new();
 
-    tick(&mut sched, &mut env, &registry, Arc::clone(&cs), Arc::clone(&ss)).await;
+    tick(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
     // Still waiting — no decision injected
     assert_eq!(
         env.current_case_dict["case_no_decision"].execution_state,
@@ -159,7 +196,14 @@ async fn workflow_stays_waiting_without_decision() {
     );
 
     // Second tick without injecting decision — still waiting
-    tick(&mut sched, &mut env, &registry, Arc::clone(&cs), Arc::clone(&ss)).await;
+    tick(
+        &mut sched,
+        &mut env,
+        &registry,
+        Arc::clone(&cs),
+        Arc::clone(&ss),
+    )
+    .await;
     assert_eq!(
         env.current_case_dict["case_no_decision"].execution_state,
         ExecutionState::Waiting

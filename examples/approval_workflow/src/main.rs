@@ -25,7 +25,7 @@ use workflow_engine::{
 };
 use workflow_engine_observe::{
     dataset::{llm_dataset, step_dataset, workflow_dataset},
-    InMemoryObserver, JsonlObserver, CompositeObserver,
+    CompositeObserver, InMemoryObserver, JsonlObserver,
 };
 
 use approval_workflow::register_workflows;
@@ -33,10 +33,10 @@ use approval_workflow::register_workflows;
 // ── Simple in-process event bus ───────────────────────────────────────────────
 // In a real application this would poll a database or message queue.
 
+use async_trait::async_trait;
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::RwLock;
-use serde_json::Value as JsonValue;
-use async_trait::async_trait;
 
 #[derive(Default)]
 struct EventBus {
@@ -45,13 +45,20 @@ struct EventBus {
 
 impl EventBus {
     fn publish(&self, case_key: &str, payload: JsonValue) {
-        self.events.write().unwrap().insert(case_key.to_string(), payload);
+        self.events
+            .write()
+            .unwrap()
+            .insert(case_key.to_string(), payload);
     }
 }
 
 #[async_trait]
 impl ResourceFetcher for EventBus {
-    async fn fetch(&self, resource_type: &str, resource_id: &str) -> anyhow::Result<Option<JsonValue>> {
+    async fn fetch(
+        &self,
+        resource_type: &str,
+        resource_id: &str,
+    ) -> anyhow::Result<Option<JsonValue>> {
         if resource_type == "review_decision" {
             Ok(self.events.read().unwrap().get(resource_id).cloned())
         } else {
@@ -79,7 +86,9 @@ async fn main() -> Result<()> {
                 .map(|w| w[1].clone())
                 .expect("--postgres requires a DATABASE_URL argument");
             let pool = workflow_engine_postgres::build_pool(&db_url)?;
-            let cs = Arc::new(workflow_engine_postgres::PostgresCaseStore::new(pool.clone()));
+            let cs = Arc::new(workflow_engine_postgres::PostgresCaseStore::new(
+                pool.clone(),
+            ));
             let ss = Arc::new(workflow_engine_postgres::PostgresStateStore::new(pool));
             cs.setup().await?;
             ss.setup().await?;
@@ -110,7 +119,8 @@ async fn main() -> Result<()> {
     // Always attach an InMemoryObserver for post-run reporting.
     // Optionally also write to a JSONL file for RLHF dataset building.
     let memory_obs = Arc::new(InMemoryObserver::new());
-    let jsonl_path = args.windows(2)
+    let jsonl_path = args
+        .windows(2)
         .find(|w| w[0] == "--jsonl")
         .map(|w| w[1].clone());
 
@@ -136,7 +146,8 @@ async fn main() -> Result<()> {
         let cases: Vec<Case> = ["parallel_001", "parallel_002", "parallel_003"]
             .iter()
             .map(|key| {
-                let mut case = Case::new((*key).into(), "parallel_session".into(), "approval".into());
+                let mut case =
+                    Case::new((*key).into(), "parallel_session".into(), "approval".into());
                 case.resource_data = Some(serde_json::json!({
                     "document_id": key,
                     "submitter": "carol",
@@ -226,7 +237,10 @@ async fn main() -> Result<()> {
                 info!("Shutdown requested before tick 1, exiting gracefully");
                 return Ok(());
             }
-            r => info!("After tick 1: {:?}, case state={:?}", r, env.current_case_dict[case_key].execution_state),
+            r => info!(
+                "After tick 1: {:?}, case state={:?}",
+                r, env.current_case_dict[case_key].execution_state
+            ),
         }
 
         // Simulate a reviewer approving after a short delay
@@ -260,9 +274,7 @@ async fn main() -> Result<()> {
         let final_case = &env.current_case_dict[case_key];
         info!(
             "Workflow complete: state={:?}, type={:?}, desc={:?}",
-            final_case.execution_state,
-            final_case.finished_type,
-            final_case.finished_description
+            final_case.execution_state, final_case.finished_type, final_case.finished_description
         );
     }
 

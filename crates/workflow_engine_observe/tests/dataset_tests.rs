@@ -98,7 +98,7 @@ fn workflow_dataset_skips_null_input_or_output() {
 fn step_dataset_only_includes_non_cached() {
     let steps = vec![
         step("s1", false, json!("result1")),
-        step("s2", true, json!("result2")),   // cached — skip
+        step("s2", true, json!("result2")), // cached — skip
         step("s3", false, json!("result3")),
     ];
     let entries = step_dataset(&steps);

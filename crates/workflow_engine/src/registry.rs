@@ -101,7 +101,9 @@ mod tests {
     #[test]
     fn test_get_unknown_code_returns_none() {
         let reg = WorkflowRegistry::new();
-        assert!(reg.get("nonexistent", make_test_case("nonexistent")).is_none());
+        assert!(reg
+            .get("nonexistent", make_test_case("nonexistent"))
+            .is_none());
     }
 
     #[test]

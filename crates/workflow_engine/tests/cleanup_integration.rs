@@ -103,11 +103,7 @@ async fn finish_does_not_affect_other_cases_state() {
     ctx_a.finish("ok".into(), "done".into()).await.unwrap();
 
     // A's state is gone
-    assert!(state_store_a
-        .get_all("case_A")
-        .await
-        .unwrap()
-        .is_empty());
+    assert!(state_store_a.get_all("case_A").await.unwrap().is_empty());
     // B's state is untouched
     assert_eq!(state_store_b.get_all("case_B").await.unwrap().len(), 1);
 }

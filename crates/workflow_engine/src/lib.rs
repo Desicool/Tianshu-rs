@@ -23,7 +23,5 @@ pub use observe::{
 pub use poll::{IntentRouterV2, PollEvaluator, PollMatch, ResourceFetcher};
 pub use registry::WorkflowRegistry;
 pub use stage::{run_stages, StageBase, StageKey, StageOutcome};
-pub use store::{
-    CaseStore, InMemoryCaseStore, InMemoryStateStore, StateEntry, StateStore,
-};
+pub use store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateEntry, StateStore};
 pub use workflow::{BaseWorkflow, PollPredicate, WorkflowResult};

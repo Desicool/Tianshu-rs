@@ -163,8 +163,9 @@ mod tests {
 
     #[test]
     fn tls_enabled_by_default() {
-        let config: tokio_postgres::Config =
-            "postgres://postgres:secret@db.internal:5432/app".parse().unwrap();
+        let config: tokio_postgres::Config = "postgres://postgres:secret@db.internal:5432/app"
+            .parse()
+            .unwrap();
         assert!(uses_tls(&config));
     }
 

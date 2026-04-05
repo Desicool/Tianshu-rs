@@ -60,7 +60,10 @@ impl ShutdownSignal {
     /// Returns the signal and a trigger that fires it.
     pub fn manual() -> (Self, ShutdownTrigger) {
         let (tx, rx) = watch::channel(false);
-        (ShutdownSignal { receiver: rx }, ShutdownTrigger { sender: tx })
+        (
+            ShutdownSignal { receiver: rx },
+            ShutdownTrigger { sender: tx },
+        )
     }
 }
 
@@ -87,8 +90,8 @@ pub fn shutdown_signal() -> ShutdownSignal {
         #[cfg(unix)]
         {
             use tokio::signal::unix::{signal, SignalKind};
-            let mut sigterm = signal(SignalKind::terminate())
-                .expect("failed to register SIGTERM handler");
+            let mut sigterm =
+                signal(SignalKind::terminate()).expect("failed to register SIGTERM handler");
             tokio::select! {
                 _ = ctrl_c => {},
                 _ = sigterm.recv() => {},
@@ -240,11 +243,8 @@ impl SchedulerV2 {
                 }
             };
 
-            let mut ctx = WorkflowContext::new(
-                case,
-                Arc::clone(&case_store),
-                Arc::clone(&state_store),
-            );
+            let mut ctx =
+                WorkflowContext::new(case, Arc::clone(&case_store), Arc::clone(&state_store));
             if let Some(obs) = &self.observer {
                 ctx.set_observer(Arc::clone(obs));
             }
@@ -491,11 +491,7 @@ mod tests {
     use async_trait::async_trait;
 
     fn make_test_case(code: &str, state: ExecutionState) -> Case {
-        let mut c = Case::new(
-            format!("case_{}", code),
-            "sess_test".into(),
-            code.into(),
-        );
+        let mut c = Case::new(format!("case_{}", code), "sess_test".into(), code.into());
         match state {
             ExecutionState::Running => {} // default
             ExecutionState::Waiting => c.mc_wait(),
@@ -527,7 +523,10 @@ mod tests {
     #[async_trait]
     impl BaseWorkflow for FinishWorkflow {
         async fn run(&self, _ctx: &mut WorkflowContext) -> Result<WorkflowResult> {
-            Ok(WorkflowResult::Finished("SUCCESS".into(), "All done".into()))
+            Ok(WorkflowResult::Finished(
+                "SUCCESS".into(),
+                "All done".into(),
+            ))
         }
     }
 
@@ -573,7 +572,10 @@ mod tests {
         let registry = WorkflowRegistry::new();
         let (cs, ss) = make_stores();
 
-        let result = scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        let result = scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
         assert!(!result.any_executed());
     }
 
@@ -585,7 +587,10 @@ mod tests {
         let registry = registry_with(vec![("greeting", "continue")]);
         let (cs, ss) = make_stores();
 
-        let result = scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        let result = scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
         assert!(result.any_executed());
     }
 
@@ -597,7 +602,10 @@ mod tests {
         let registry = registry_with(vec![("greeting", "continue")]);
         let (cs, ss) = make_stores();
 
-        let result = scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        let result = scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
         assert!(!result.any_executed());
     }
 
@@ -610,7 +618,10 @@ mod tests {
         let registry = registry_with(vec![("greeting", "continue")]);
         let (cs, ss) = make_stores();
 
-        let result = scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        let result = scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
         assert!(!result.any_executed());
     }
 
@@ -623,7 +634,10 @@ mod tests {
         let registry = registry_with(vec![("greeting", "continue")]);
         let (cs, ss) = make_stores();
 
-        let result = scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        let result = scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
         assert!(!result.any_executed());
     }
 
@@ -635,7 +649,10 @@ mod tests {
         let registry = WorkflowRegistry::new();
         let (cs, ss) = make_stores();
 
-        let result = scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        let result = scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
         assert!(!result.any_executed());
     }
 
@@ -648,7 +665,10 @@ mod tests {
         let registry = registry_with(vec![("checkout", "finish")]);
         let (cs, ss) = make_stores();
 
-        scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
 
         let updated = env.current_case_dict.get(&case_key).unwrap();
         assert_eq!(updated.execution_state, ExecutionState::Finished);
@@ -664,7 +684,10 @@ mod tests {
         let registry = registry_with(vec![("poll_wf", "waiting")]);
         let (cs, ss) = make_stores();
 
-        scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
 
         let updated = env.current_case_dict.get(&case_key).unwrap();
         assert_eq!(updated.execution_state, ExecutionState::Waiting);
@@ -678,7 +701,10 @@ mod tests {
         let registry = registry_with(vec![("bad_wf", "error")]);
         let (cs, ss) = make_stores();
 
-        let result = scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        let result = scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
         assert!(!result.any_executed());
     }
 
@@ -691,7 +717,10 @@ mod tests {
         let registry = registry_with(vec![("wake_wf", "continue")]);
         let (cs, ss) = make_stores();
 
-        scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+        scheduler
+            .tick(&mut env, &registry, cs, ss, None, None)
+            .await
+            .unwrap();
 
         let updated = env.current_case_dict.get(&case_key).unwrap();
         assert_eq!(updated.execution_state, ExecutionState::Running);
@@ -810,8 +839,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_environment_with_execution_mode() {
-        let env = SchedulerEnvironment::new("s", vec![])
-            .with_execution_mode(ExecutionMode::Parallel);
+        let env =
+            SchedulerEnvironment::new("s", vec![]).with_execution_mode(ExecutionMode::Parallel);
         assert_eq!(env.execution_mode, ExecutionMode::Parallel);
     }
 }

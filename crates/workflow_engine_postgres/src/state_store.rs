@@ -84,10 +84,7 @@ impl StateStore for PostgresStateStore {
     async fn delete_by_case(&self, case_key: &str) -> Result<()> {
         let client = self.pool.get().await?;
         let count = client
-            .execute(
-                "DELETE FROM wf_state WHERE case_key = $1",
-                &[&case_key],
-            )
+            .execute("DELETE FROM wf_state WHERE case_key = $1", &[&case_key])
             .await?;
         info!("Deleted {} state entries for case_key={}", count, case_key);
         Ok(())

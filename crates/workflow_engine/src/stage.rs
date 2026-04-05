@@ -17,10 +17,7 @@ pub enum StageOutcome<S: StageKey> {
     /// Stage is waiting for an external event
     Waiting(Vec<PollPredicate>),
     /// Stage completed; advance to next stage and optionally clear prior stages
-    Next {
-        stage: S,
-        clear_stages: Vec<S>,
-    },
+    Next { stage: S, clear_stages: Vec<S> },
     /// Workflow is finished
     Finish {
         finish_type: String,
@@ -276,7 +273,9 @@ mod tests {
         let mut registry: HashMap<TestStage, Box<dyn StageBase<TestStage>>> = HashMap::new();
         registry.insert(TestStage::Start, Box::new(WaitingStage));
 
-        let result = run_stages(&mut ctx, TestStage::Start, &registry).await.unwrap();
+        let result = run_stages(&mut ctx, TestStage::Start, &registry)
+            .await
+            .unwrap();
         assert!(matches!(result, WorkflowResult::Waiting(_)));
     }
 }

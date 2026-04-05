@@ -1,7 +1,10 @@
-use std::sync::Arc;
 use chrono::Utc;
 use serde_json::json;
-use workflow_engine::{Observer, observe::{StepRecord, WorkflowRecord, LlmCallRecord}, LlmRequest, LlmMessage, LlmUsage};
+use std::sync::Arc;
+use workflow_engine::{
+    observe::{LlmCallRecord, StepRecord, WorkflowRecord},
+    LlmMessage, LlmRequest, LlmUsage, Observer,
+};
 use workflow_engine_observe::{CompositeObserver, InMemoryObserver};
 
 fn step(case_key: &str) -> StepRecord {
@@ -42,12 +45,18 @@ fn llm_call(case_key: &str) -> LlmCallRecord {
         request: LlmRequest {
             model: "m".to_string(),
             system_prompt: None,
-            messages: vec![LlmMessage { role: "user".to_string(), content: "hi".to_string() }],
+            messages: vec![LlmMessage {
+                role: "user".to_string(),
+                content: "hi".to_string(),
+            }],
             temperature: None,
             max_tokens: None,
         },
         response_content: Some("ok".to_string()),
-        usage: Some(LlmUsage { prompt_tokens: 1, completion_tokens: 1 }),
+        usage: Some(LlmUsage {
+            prompt_tokens: 1,
+            completion_tokens: 1,
+        }),
         duration_ms: 50,
         timestamp: Utc::now(),
         error: None,
@@ -107,7 +116,8 @@ async fn empty_composite_is_valid() {
 
 #[tokio::test]
 async fn usable_as_arc_dyn_observer() {
-    let obs: Arc<dyn Observer> =
-        Arc::new(CompositeObserver::new(vec![Arc::new(InMemoryObserver::new())]));
+    let obs: Arc<dyn Observer> = Arc::new(CompositeObserver::new(vec![Arc::new(
+        InMemoryObserver::new(),
+    )]));
     obs.on_step(&step("c")).await;
 }

@@ -124,10 +124,7 @@ impl OpenAiProvider {
     }
 
     /// Create a builder for full configuration.
-    pub fn builder(
-        api_key: impl Into<String>,
-        model: impl Into<String>,
-    ) -> OpenAiProviderBuilder {
+    pub fn builder(api_key: impl Into<String>, model: impl Into<String>) -> OpenAiProviderBuilder {
         OpenAiProviderBuilder::new(api_key, model)
     }
 
@@ -233,4 +230,3 @@ impl LlmProvider for OpenAiProvider {
         })
     }
 }
-

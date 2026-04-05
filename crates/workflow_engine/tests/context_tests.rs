@@ -117,9 +117,10 @@ async fn context_step_executes_and_checkpoints() {
 
     // Second call must restore from checkpoint without re-executing
     let result2: i32 = ctx
-        .step("compute", |_ctx| async move {
-            panic!("Should not re-execute")
-        })
+        .step(
+            "compute",
+            |_ctx| async move { panic!("Should not re-execute") },
+        )
         .await
         .unwrap();
 

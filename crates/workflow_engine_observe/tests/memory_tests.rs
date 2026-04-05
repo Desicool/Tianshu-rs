@@ -1,12 +1,12 @@
+use chrono::Utc;
+use serde_json::json;
 use std::sync::Arc;
+use workflow_engine::Observer;
 use workflow_engine::{
     observe::{LlmCallRecord, StepRecord, WorkflowRecord},
     LlmMessage, LlmRequest, LlmUsage,
 };
 use workflow_engine_observe::InMemoryObserver;
-use workflow_engine::Observer;
-use chrono::Utc;
-use serde_json::json;
 
 fn make_step(case_key: &str, step_name: &str, cached: bool) -> StepRecord {
     StepRecord {
@@ -54,7 +54,10 @@ fn make_llm(case_key: &str) -> LlmCallRecord {
             max_tokens: None,
         },
         response_content: Some("hi".to_string()),
-        usage: Some(LlmUsage { prompt_tokens: 5, completion_tokens: 3 }),
+        usage: Some(LlmUsage {
+            prompt_tokens: 5,
+            completion_tokens: 3,
+        }),
         duration_ms: 200,
         timestamp: Utc::now(),
         error: None,

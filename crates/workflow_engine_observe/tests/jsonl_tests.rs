@@ -76,7 +76,9 @@ fn read_jsonl(path: &str) -> Vec<Value> {
 #[tokio::test]
 async fn writes_step_as_jsonl_line() {
     let file = NamedTempFile::new().unwrap();
-    let obs = JsonlObserver::new(file.path().to_str().unwrap()).await.unwrap();
+    let obs = JsonlObserver::new(file.path().to_str().unwrap())
+        .await
+        .unwrap();
 
     obs.on_step(&step()).await;
     obs.flush().await;
@@ -92,7 +94,9 @@ async fn writes_step_as_jsonl_line() {
 #[tokio::test]
 async fn writes_workflow_complete_as_jsonl_line() {
     let file = NamedTempFile::new().unwrap();
-    let obs = JsonlObserver::new(file.path().to_str().unwrap()).await.unwrap();
+    let obs = JsonlObserver::new(file.path().to_str().unwrap())
+        .await
+        .unwrap();
 
     obs.on_workflow_complete(&workflow()).await;
     obs.flush().await;
@@ -106,7 +110,9 @@ async fn writes_workflow_complete_as_jsonl_line() {
 #[tokio::test]
 async fn writes_llm_call_as_jsonl_line() {
     let file = NamedTempFile::new().unwrap();
-    let obs = JsonlObserver::new(file.path().to_str().unwrap()).await.unwrap();
+    let obs = JsonlObserver::new(file.path().to_str().unwrap())
+        .await
+        .unwrap();
 
     obs.on_llm_call(&llm_call()).await;
     obs.flush().await;
@@ -120,7 +126,9 @@ async fn writes_llm_call_as_jsonl_line() {
 #[tokio::test]
 async fn multiple_events_each_on_own_line() {
     let file = NamedTempFile::new().unwrap();
-    let obs = JsonlObserver::new(file.path().to_str().unwrap()).await.unwrap();
+    let obs = JsonlObserver::new(file.path().to_str().unwrap())
+        .await
+        .unwrap();
 
     obs.on_step(&step()).await;
     obs.on_workflow_complete(&workflow()).await;
@@ -151,8 +159,11 @@ async fn creates_file_if_not_exists() {
 #[tokio::test]
 async fn usable_as_arc_dyn_observer() {
     let file = NamedTempFile::new().unwrap();
-    let obs: Arc<dyn Observer> =
-        Arc::new(JsonlObserver::new(file.path().to_str().unwrap()).await.unwrap());
+    let obs: Arc<dyn Observer> = Arc::new(
+        JsonlObserver::new(file.path().to_str().unwrap())
+            .await
+            .unwrap(),
+    );
     obs.on_step(&step()).await;
     obs.flush().await;
 }

@@ -286,10 +286,7 @@ impl WorkflowContext {
             .await?;
         self.checkpoint_cache.insert(cache_key, json_value);
 
-        info!(
-            "Set state: case_key={}, name={}",
-            self.case.case_key, name
-        );
+        info!("Set state: case_key={}, name={}", self.case.case_key, name);
         Ok(())
     }
 
@@ -316,16 +313,9 @@ impl WorkflowContext {
 
         self.case_store.upsert(&self.case).await?;
 
-        match self
-            .state_store
-            .delete_by_case(&self.case.case_key)
-            .await
-        {
+        match self.state_store.delete_by_case(&self.case.case_key).await {
             Ok(()) => {
-                info!(
-                    "Cleaned up state for case_key={}",
-                    self.case.case_key
-                );
+                info!("Cleaned up state for case_key={}", self.case.case_key);
             }
             Err(e) => {
                 error!(
@@ -386,10 +376,7 @@ mod tests {
     fn checkpoint_key_format() {
         let ctx = make_ctx("ck_key");
         assert_eq!(ctx.checkpoint_step_key("step1"), "wf_step1");
-        assert_eq!(
-            ctx.cache_key("wf_step1"),
-            "ck_key:wf_step1"
-        );
+        assert_eq!(ctx.cache_key("wf_step1"), "ck_key:wf_step1");
     }
 
     #[test]

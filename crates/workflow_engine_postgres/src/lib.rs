@@ -1,7 +1,7 @@
-mod pool;
 mod case_store;
+mod pool;
 mod state_store;
 
-pub use pool::build_pool;
 pub use case_store::PostgresCaseStore;
+pub use pool::build_pool;
 pub use state_store::PostgresStateStore;

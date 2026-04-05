@@ -7,9 +7,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use serde_json::json;
 use workflow_engine::{
-    BaseWorkflow, Case, InMemoryCaseStore, InMemoryStateStore, Observer,
-    SchedulerV2, StepRecord, WorkflowContext, WorkflowRecord, WorkflowResult,
-    SchedulerEnvironment, WorkflowRegistry,
+    BaseWorkflow, Case, InMemoryCaseStore, InMemoryStateStore, Observer, SchedulerEnvironment,
+    SchedulerV2, StepRecord, WorkflowContext, WorkflowRecord, WorkflowRegistry, WorkflowResult,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -61,9 +60,11 @@ async fn on_step_called_for_fresh_execution() {
     let obs = RecordingObserver::new();
     let mut ctx = make_ctx_with_observer("case_fresh", obs.clone());
 
-    ctx.step("greet", |_| async { Ok::<_, anyhow::Error>("hello".to_string()) })
-        .await
-        .unwrap();
+    ctx.step("greet", |_| async {
+        Ok::<_, anyhow::Error>("hello".to_string())
+    })
+    .await
+    .unwrap();
 
     let steps = obs.steps.lock().unwrap();
     assert_eq!(steps.len(), 1);
@@ -81,14 +82,18 @@ async fn on_step_called_with_cached_true_on_replay() {
     let mut ctx = make_ctx_with_observer("case_replay", obs.clone());
 
     // First execution: fresh
-    ctx.step("greet", |_| async { Ok::<_, anyhow::Error>("hello".to_string()) })
-        .await
-        .unwrap();
+    ctx.step("greet", |_| async {
+        Ok::<_, anyhow::Error>("hello".to_string())
+    })
+    .await
+    .unwrap();
 
     // Second execution of the same step: should hit cache
-    ctx.step("greet", |_| async { Ok::<_, anyhow::Error>("world".to_string()) })
-        .await
-        .unwrap();
+    ctx.step("greet", |_| async {
+        Ok::<_, anyhow::Error>("world".to_string())
+    })
+    .await
+    .unwrap();
 
     let steps = obs.steps.lock().unwrap();
     assert_eq!(steps.len(), 2);
@@ -158,7 +163,9 @@ async fn no_observer_path_behaves_identically() {
 
     // No observer — should work exactly like before
     let result = ctx
-        .step("plain", |_| async { Ok::<_, anyhow::Error>("unchanged".to_string()) })
+        .step("plain", |_| async {
+            Ok::<_, anyhow::Error>("unchanged".to_string())
+        })
         .await
         .unwrap();
     assert_eq!(result, "unchanged");
@@ -180,12 +187,16 @@ async fn on_workflow_complete_fires_on_finish() {
     let mut ctx = make_ctx_with_observer("case_finish", obs.clone());
     ctx.case.resource_data = Some(json!({"input": "doc"}));
 
-    ctx.step("step_a", |_| async { Ok::<_, anyhow::Error>("a".to_string()) })
-        .await
-        .unwrap();
-    ctx.step("step_b", |_| async { Ok::<_, anyhow::Error>("b".to_string()) })
-        .await
-        .unwrap();
+    ctx.step("step_a", |_| async {
+        Ok::<_, anyhow::Error>("a".to_string())
+    })
+    .await
+    .unwrap();
+    ctx.step("step_b", |_| async {
+        Ok::<_, anyhow::Error>("b".to_string())
+    })
+    .await
+    .unwrap();
     ctx.finish("success".into(), "done".into()).await.unwrap();
 
     let workflows = obs.workflows.lock().unwrap();
@@ -220,10 +231,7 @@ async fn workflow_record_has_input_and_output_resource_data() {
 
     let wf = obs.workflows.lock().unwrap();
     // output_resource_data should reflect state at finish() time
-    assert_eq!(
-        wf[0].output_resource_data,
-        Some(json!({"stage": "final"}))
-    );
+    assert_eq!(wf[0].output_resource_data, Some(json!({"stage": "final"})));
 }
 
 #[tokio::test]
@@ -265,7 +273,10 @@ async fn scheduler_injects_observer_into_contexts() {
     let cs = Arc::new(InMemoryCaseStore::default());
     let ss = Arc::new(InMemoryStateStore::default());
 
-    scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
+    scheduler
+        .tick(&mut env, &registry, cs, ss, None, None)
+        .await
+        .unwrap();
 
     let workflows = obs.workflows.lock().unwrap();
     assert_eq!(workflows.len(), 1);

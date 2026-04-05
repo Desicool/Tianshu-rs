@@ -433,11 +433,7 @@ mod tests {
     #[tokio::test]
     async fn observed_llm_provider_records_call() {
         let obs = CollectingObserver::new();
-        let provider = ObservedLlmProvider::new(
-            Arc::new(OkLlmProvider),
-            obs.clone(),
-            "case_p",
-        );
+        let provider = ObservedLlmProvider::new(Arc::new(OkLlmProvider), obs.clone(), "case_p");
 
         provider.complete(make_request()).await.unwrap();
 
@@ -462,8 +458,7 @@ mod tests {
     #[tokio::test]
     async fn observed_llm_provider_error_still_records() {
         let obs = CollectingObserver::new();
-        let provider =
-            ObservedLlmProvider::new(Arc::new(ErrLlmProvider), obs.clone(), "case_err");
+        let provider = ObservedLlmProvider::new(Arc::new(ErrLlmProvider), obs.clone(), "case_err");
 
         let result = provider.complete(make_request()).await;
         assert!(result.is_err());

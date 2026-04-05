@@ -105,10 +105,7 @@ impl CaseStore for PostgresCaseStore {
         debug!("Fetching case by key: {}", case_key);
 
         let row_opt = client
-            .query_opt(
-                "SELECT * FROM wf_cases WHERE case_key = $1",
-                &[&case_key],
-            )
+            .query_opt("SELECT * FROM wf_cases WHERE case_key = $1", &[&case_key])
             .await?;
 
         Ok(row_opt.map(|r| Self::row_to_case(&r)).transpose()?)

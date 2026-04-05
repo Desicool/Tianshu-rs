@@ -8,6 +8,7 @@ members = [
     "examples/example_tools",
     "examples/plan_and_execute",
     "examples/react_agent",
+    "examples/tool_orchestration",
 ]
 resolver = "2"
 

@@ -1,0 +1,25 @@
+[package]
+name = "tool_orchestration"
+version = "0.1.0"
+edition = "2021"
+description = "Tool orchestration workflow example — stage-based LLM tool-use loop"
+
+[[bin]]
+name = "tool_orchestration"
+path = "src/main.rs"
+
+[dependencies]
+workflow_engine = { path = "../../crates/workflow_engine" }
+workflow_engine_llm_openai = { path = "../../crates/workflow_engine_llm_openai" }
+workflow_engine_observe = { path = "../../crates/workflow_engine_observe" }
+example_tools = { path = "../example_tools" }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

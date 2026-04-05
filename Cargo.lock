@@ -1585,6 +1585,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "tool_orchestration"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "example_tools",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workflow_engine",
+ "workflow_engine_llm_openai",
+ "workflow_engine_observe",
+]
+
+[[package]]
 name = "tower-service"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

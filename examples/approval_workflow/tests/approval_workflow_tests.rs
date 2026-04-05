@@ -3,7 +3,7 @@ use std::sync::Arc;
 use workflow_engine::{
     case::{Case, ExecutionState},
     engine::{SchedulerEnvironment, SchedulerV2},
-    store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateStore},
+    store::{InMemoryCaseStore, InMemoryStateStore},
     WorkflowRegistry,
 };
 

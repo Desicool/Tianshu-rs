@@ -5,6 +5,7 @@ members = [
     "crates/workflow_engine_llm_openai",
     "crates/workflow_engine_observe",
     "examples/approval_workflow",
+    "examples/example_tools",
 ]
 resolver = "2"
 

@@ -126,3 +126,81 @@ async fn context_step_executes_and_checkpoints() {
 
     assert_eq!(result2, 7);
 }
+
+// ── Session-scoped state tests ──────────────────────────────────────────────
+
+#[tokio::test]
+async fn context_set_and_get_session_state() {
+    let cs = Arc::new(InMemoryCaseStore::default());
+    let ss = Arc::new(InMemoryStateStore::default());
+    let case = make_case("case_ss_1");
+    let mut ctx = WorkflowContext::new(case, cs, ss);
+
+    ctx.set_session_state("counter", 42_i32).await.unwrap();
+    let val: i32 = ctx.get_session_state("counter", 0).await.unwrap();
+    assert_eq!(val, 42);
+}
+
+#[tokio::test]
+async fn context_get_session_state_returns_default_when_unset() {
+    let cs = Arc::new(InMemoryCaseStore::default());
+    let ss = Arc::new(InMemoryStateStore::default());
+    let case = make_case("case_ss_2");
+    let mut ctx = WorkflowContext::new(case, cs, ss);
+
+    let val: String = ctx
+        .get_session_state("missing", "default_val".to_string())
+        .await
+        .unwrap();
+    assert_eq!(val, "default_val");
+}
+
+#[tokio::test]
+async fn context_two_cases_share_session_state() {
+    let cs = Arc::new(InMemoryCaseStore::default());
+    let ss: Arc<InMemoryStateStore> = Arc::new(InMemoryStateStore::default());
+
+    // Two cases in the same session
+    let case_a = Case::new("case_a".into(), "shared_sess".into(), "wf".into());
+    let case_b = Case::new("case_b".into(), "shared_sess".into(), "wf".into());
+
+    let mut ctx_a = WorkflowContext::new(case_a, cs.clone(), ss.clone());
+    let mut ctx_b = WorkflowContext::new(case_b, cs, ss);
+
+    // Case A writes session state
+    ctx_a
+        .set_session_state("shared_var", "from_a".to_string())
+        .await
+        .unwrap();
+
+    // Case B reads the same session state
+    let val: String = ctx_b
+        .get_session_state("shared_var", "none".to_string())
+        .await
+        .unwrap();
+    assert_eq!(val, "from_a");
+}
+
+#[tokio::test]
+async fn context_session_state_independent_of_case_state() {
+    let cs = Arc::new(InMemoryCaseStore::default());
+    let ss = Arc::new(InMemoryStateStore::default());
+    let case = make_case("case_ss_4");
+    let mut ctx = WorkflowContext::new(case, cs, ss);
+
+    // Set case-scoped and session-scoped state with the same name
+    ctx.set_state("x", "case_value".to_string()).await.unwrap();
+    ctx.set_session_state("x", "session_value".to_string())
+        .await
+        .unwrap();
+
+    // They should be independent
+    let case_val: String = ctx.get_state("x", "none".to_string()).await.unwrap();
+    let session_val: String = ctx
+        .get_session_state("x", "none".to_string())
+        .await
+        .unwrap();
+
+    assert_eq!(case_val, "case_value");
+    assert_eq!(session_val, "session_value");
+}

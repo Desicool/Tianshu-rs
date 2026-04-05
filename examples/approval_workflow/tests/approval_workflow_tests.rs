@@ -64,7 +64,7 @@ async fn workflow_starts_running_then_waits_for_review() {
 
     let case = make_approval_case("case_run_wait");
     let (cs, ss) = make_stores();
-    let mut env = SchedulerEnvironment::new("s1", vec![case]);
+    let mut env = SchedulerEnvironment::from_session_id("s1", vec![case]);
     let mut sched = SchedulerV2::new();
 
     // First tick: submits the document, then enters Waiting for review
@@ -81,7 +81,7 @@ async fn workflow_completes_approved() {
 
     let case = make_approval_case("case_approve");
     let (cs, ss) = make_stores();
-    let mut env = SchedulerEnvironment::new("s2", vec![case]);
+    let mut env = SchedulerEnvironment::from_session_id("s2", vec![case]);
     let mut sched = SchedulerV2::new();
 
     // Tick 1: submit → waiting
@@ -130,7 +130,7 @@ async fn workflow_completes_rejected() {
 
     let case = make_approval_case("case_reject");
     let (cs, ss) = make_stores();
-    let mut env = SchedulerEnvironment::new("s3", vec![case]);
+    let mut env = SchedulerEnvironment::from_session_id("s3", vec![case]);
     let mut sched = SchedulerV2::new();
 
     // Tick 1: submit → waiting
@@ -178,7 +178,7 @@ async fn workflow_stays_waiting_without_decision() {
 
     let case = make_approval_case("case_no_decision");
     let (cs, ss) = make_stores();
-    let mut env = SchedulerEnvironment::new("s4", vec![case]);
+    let mut env = SchedulerEnvironment::from_session_id("s4", vec![case]);
     let mut sched = SchedulerV2::new();
 
     tick(

@@ -5,6 +5,7 @@ pub mod llm;
 pub mod observe;
 pub mod poll;
 pub mod registry;
+pub mod session;
 pub mod stage;
 pub mod store;
 pub mod workflow;
@@ -22,6 +23,10 @@ pub use observe::{
 };
 pub use poll::{IntentRouterV2, PollEvaluator, PollMatch, ResourceFetcher};
 pub use registry::WorkflowRegistry;
+pub use session::Session;
 pub use stage::{run_stages, StageBase, StageKey, StageOutcome};
-pub use store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateEntry, StateStore};
+pub use store::{
+    CaseStore, InMemoryCaseStore, InMemorySessionStore, InMemoryStateStore, SessionStateEntry,
+    SessionStore, StateEntry, StateStore,
+};
 pub use workflow::{BaseWorkflow, PollPredicate, WorkflowResult};

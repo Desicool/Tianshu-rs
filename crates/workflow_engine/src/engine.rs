@@ -9,6 +9,7 @@ use crate::context::WorkflowContext;
 use crate::observe::Observer;
 use crate::poll::{PollEvaluator, ResourceFetcher};
 use crate::registry::WorkflowRegistry;
+use crate::session::Session;
 use crate::store::{CaseStore, StateStore};
 use crate::workflow::{PollPredicate, WorkflowResult};
 
@@ -115,22 +116,27 @@ struct WaitingProbeResult {
 
 /// Simple in-memory environment for one scheduler tick.
 pub struct SchedulerEnvironment {
-    pub session_id: String,
+    pub session: Session,
     pub current_case_dict: HashMap<String, Case>,
     pub execution_mode: ExecutionMode,
 }
 
 impl SchedulerEnvironment {
-    pub fn new(session_id: impl Into<String>, cases: Vec<Case>) -> Self {
+    pub fn new(session: Session, cases: Vec<Case>) -> Self {
         let mut dict = HashMap::new();
         for c in cases {
             dict.insert(c.case_key.clone(), c);
         }
         Self {
-            session_id: session_id.into(),
+            session,
             current_case_dict: dict,
             execution_mode: ExecutionMode::default(),
         }
+    }
+
+    /// Convenience constructor from a bare session ID string.
+    pub fn from_session_id(session_id: impl Into<String>, cases: Vec<Case>) -> Self {
+        Self::new(Session::new(session_id), cases)
     }
 
     /// Set the execution mode for workflows in this session.
@@ -503,7 +509,7 @@ mod tests {
     }
 
     fn make_env(cases: Vec<Case>) -> SchedulerEnvironment {
-        SchedulerEnvironment::new("sess_test", cases)
+        SchedulerEnvironment::from_session_id("sess_test", cases)
     }
 
     fn make_stores() -> (Arc<dyn CaseStore>, Arc<dyn StateStore>) {
@@ -784,7 +790,7 @@ mod tests {
         let case2 = make_test_case("wf_b", ExecutionState::Running);
         let case1_key = case1.case_key.clone();
         let case2_key = case2.case_key.clone();
-        let mut env = SchedulerEnvironment::new("sess_test", vec![case1, case2])
+        let mut env = SchedulerEnvironment::from_session_id("sess_test", vec![case1, case2])
             .with_execution_mode(ExecutionMode::Parallel);
 
         let registry = registry_with(vec![("wf_a", "continue"), ("wf_b", "finish")]);
@@ -815,7 +821,7 @@ mod tests {
         let bad = make_test_case("bad_wf", ExecutionState::Running);
         let good_key = good.case_key.clone();
         let bad_key = bad.case_key.clone();
-        let mut env = SchedulerEnvironment::new("sess_test", vec![good, bad])
+        let mut env = SchedulerEnvironment::from_session_id("sess_test", vec![good, bad])
             .with_execution_mode(ExecutionMode::Parallel);
 
         let registry = registry_with(vec![("good_wf", "finish"), ("bad_wf", "error")]);
@@ -841,8 +847,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_environment_with_execution_mode() {
-        let env =
-            SchedulerEnvironment::new("s", vec![]).with_execution_mode(ExecutionMode::Parallel);
+        let env = SchedulerEnvironment::from_session_id("s", vec![])
+            .with_execution_mode(ExecutionMode::Parallel);
         assert_eq!(env.execution_mode, ExecutionMode::Parallel);
     }
 }

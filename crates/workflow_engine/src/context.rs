@@ -290,6 +290,72 @@ impl WorkflowContext {
         Ok(())
     }
 
+    // ── Session-scoped state variable API (cross-case) ────────────────────
+
+    fn session_state_step_key(&self, name: &str) -> String {
+        format!("wf_sess_state_{}", name)
+    }
+
+    fn session_cache_key(&self, step_key: &str) -> String {
+        format!("session:{}:{}", self.case.session_id, step_key)
+    }
+
+    /// Read a session-scoped (cross-case) variable, returning `default` if not set.
+    ///
+    /// Session-scoped variables are shared across all cases in the same session.
+    /// **No engine-level locking is provided** — workflows that use shared
+    /// variables are responsible for their own concurrency control.
+    pub async fn get_session_state<T>(&mut self, name: &str, default: T) -> Result<T>
+    where
+        T: serde::Serialize + serde::de::DeserializeOwned,
+    {
+        let step_key = self.session_state_step_key(name);
+        let cache_key = self.session_cache_key(&step_key);
+
+        if let Some(v) = self.checkpoint_cache.get(&cache_key) {
+            return Ok(serde_json::from_value(v.clone())?);
+        }
+
+        match self
+            .state_store
+            .get_session(&self.case.session_id, &step_key)
+            .await?
+        {
+            Some(entry) => {
+                let value: JsonValue = serde_json::from_str(&entry.data)?;
+                self.checkpoint_cache.insert(cache_key, value.clone());
+                Ok(serde_json::from_value(value)?)
+            }
+            None => Ok(default),
+        }
+    }
+
+    /// Write a session-scoped (cross-case) variable.
+    ///
+    /// **No engine-level locking is provided.** If multiple cases within the
+    /// same session write to the same variable concurrently, the last write wins.
+    /// Workflows are responsible for their own concurrency control.
+    pub async fn set_session_state<T>(&mut self, name: &str, value: T) -> Result<()>
+    where
+        T: serde::Serialize,
+    {
+        let step_key = self.session_state_step_key(name);
+        let cache_key = self.session_cache_key(&step_key);
+        let json_value = serde_json::to_value(&value)?;
+        let data = serde_json::to_string(&json_value)?;
+
+        self.state_store
+            .save_session(&self.case.session_id, &step_key, &data)
+            .await?;
+        self.checkpoint_cache.insert(cache_key, json_value);
+
+        info!(
+            "Set session state: session_id={}, name={}",
+            self.case.session_id, name
+        );
+        Ok(())
+    }
+
     // ── Workflow completion ──────────────────────────────────────────────────
 
     /// Mark the workflow as finished.

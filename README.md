@@ -123,9 +123,16 @@ The workflow holds no thread, no connection, no memory while waiting. It can res
 
 ### 4. Database-agnostic storage
 
-Two small traits. Implement them for your backend of choice:
+Three small traits. Implement them for your backend of choice:
 
 ```rust
+#[async_trait]
+pub trait SessionStore: Send + Sync {
+    async fn upsert(&self, session: &Session) -> Result<()>;
+    async fn get(&self, session_id: &str) -> Result<Option<Session>>;
+    async fn delete(&self, session_id: &str) -> Result<()>;
+}
+
 #[async_trait]
 pub trait CaseStore: Send + Sync {
     async fn upsert(&self, case: &Case) -> Result<()>;
@@ -139,8 +146,14 @@ pub trait StateStore: Send + Sync {
     async fn get(&self, case_key: &str, step: &str) -> Result<Option<StateEntry>>;
     async fn get_all(&self, case_key: &str) -> Result<Vec<StateEntry>>;
     async fn delete_by_case(&self, case_key: &str) -> Result<()>;
+    // Session-scoped (cross-case) state methods also available
+    async fn save_session(&self, session_id: &str, step: &str, data: &str) -> Result<()>;
+    async fn get_session(&self, session_id: &str, step: &str) -> Result<Option<SessionStateEntry>>;
+    // ...
 }
 ```
+
+`SessionStore` is intentionally minimal — session structure is highly business-specific, so users should implement it to match their schema. The engine provides `InMemorySessionStore` and `PostgresSessionStore` as reference implementations.
 
 The community can (and should) build adapters for MySQL, MongoDB, Redis, DynamoDB, and anything else.
 
@@ -175,6 +188,7 @@ use workflow_engine::{
     case::Case,
     context::WorkflowContext,
     engine::{SchedulerEnvironment, SchedulerV2},
+    session::Session,
     store::{InMemoryCaseStore, InMemoryStateStore},
     workflow::{BaseWorkflow, WorkflowResult},
     WorkflowRegistry,
@@ -201,11 +215,13 @@ async fn main() -> anyhow::Result<()> {
 
     let cs = Arc::new(InMemoryCaseStore::default());
     let ss = Arc::new(InMemoryStateStore::default());
+
+    let session = Session::new("session_1");
     let case = Case::new("case_1".into(), "session_1".into(), "hello".into());
-    let mut env = SchedulerEnvironment::new("session_1", vec![case]);
+    let mut env = SchedulerEnvironment::new(session, vec![case]);
     let mut scheduler = SchedulerV2::new();
 
-    scheduler.tick(&mut env, &registry, cs, ss, None).await?;
+    scheduler.tick(&mut env, &registry, cs, ss, None, None).await?;
     Ok(())
 }
 ```
@@ -214,12 +230,41 @@ See [`examples/approval_workflow`](examples/approval_workflow/) for a complete e
 
 ---
 
+## Sessions and cross-case variables
+
+A **session** groups related cases. One session can have multiple cases running in parallel:
+
+```rust
+use workflow_engine::{session::Session, engine::{SchedulerEnvironment, ExecutionMode}};
+
+let session = Session::new("session_1")
+    .with_metadata(serde_json::json!({"user": "alice"}));
+
+let cases = vec![case_a, case_b, case_c]; // all share session_1
+let env = SchedulerEnvironment::new(session, cases)
+    .with_execution_mode(ExecutionMode::Parallel);
+```
+
+Cases within a session can share **session-scoped variables** — state that is visible across cases:
+
+```rust
+// In any workflow's run() method:
+ctx.set_session_state("shared_counter", 42).await?;
+
+// Another case in the same session can read it:
+let val: i32 = ctx.get_session_state("shared_counter", 0).await?;
+```
+
+Session-scoped variables use last-write-wins semantics. **The engine provides no locking** — workflows that need concurrency control for shared variables must implement it themselves.
+
+---
+
 ## Crates
 
 | Crate | Description |
 |---|---|
 | `workflow_engine` | Core library: scheduler, traits, in-memory stores |
-| `workflow_engine_postgres` | PostgreSQL adapters for `CaseStore` + `StateStore` |
+| `workflow_engine_postgres` | PostgreSQL adapters for `SessionStore` + `CaseStore` + `StateStore` |
 | `workflow_engine_llm_openai` | `LlmProvider` adapter for OpenAI-compatible APIs |
 
 ---

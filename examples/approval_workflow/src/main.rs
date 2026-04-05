@@ -20,6 +20,7 @@ use workflow_engine::{
     case::Case,
     engine::{shutdown_signal, ExecutionMode, SchedulerEnvironment, SchedulerV2, TickResult},
     poll::ResourceFetcher,
+    session::Session,
     store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateStore},
     WorkflowRegistry,
 };
@@ -157,7 +158,8 @@ async fn main() -> Result<()> {
             })
             .collect();
 
-        let mut env = SchedulerEnvironment::new("parallel_session", cases)
+        let session = Session::new("parallel_session");
+        let mut env = SchedulerEnvironment::new(session, cases)
             .with_execution_mode(ExecutionMode::Parallel);
         let mut scheduler = SchedulerV2::new();
         scheduler.set_observer(observer.clone());
@@ -216,7 +218,8 @@ async fn main() -> Result<()> {
             "title": "Infrastructure Budget 2025"
         }));
 
-        let mut env = SchedulerEnvironment::new("demo_session", vec![case]);
+        let session = Session::new("demo_session");
+        let mut env = SchedulerEnvironment::new(session, vec![case]);
         let mut scheduler = SchedulerV2::new();
         scheduler.set_observer(observer.clone());
 

@@ -175,6 +175,7 @@ use workflow_engine::{
     case::Case,
     context::WorkflowContext,
     engine::{SchedulerEnvironment, SchedulerV2},
+    session::Session,
     store::{InMemoryCaseStore, InMemoryStateStore},
     workflow::{BaseWorkflow, WorkflowResult},
     WorkflowRegistry,
@@ -201,11 +202,13 @@ async fn main() -> anyhow::Result<()> {
 
     let cs = Arc::new(InMemoryCaseStore::default());
     let ss = Arc::new(InMemoryStateStore::default());
+
+    let session = Session::new("session_1");
     let case = Case::new("case_1".into(), "session_1".into(), "hello".into());
-    let mut env = SchedulerEnvironment::new("session_1", vec![case]);
+    let mut env = SchedulerEnvironment::new(session, vec![case]);
     let mut scheduler = SchedulerV2::new();
 
-    scheduler.tick(&mut env, &registry, cs, ss, None).await?;
+    scheduler.tick(&mut env, &registry, cs, ss, None, None).await?;
     Ok(())
 }
 ```

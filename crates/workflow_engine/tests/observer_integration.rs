@@ -265,7 +265,7 @@ async fn scheduler_injects_observer_into_contexts() {
     scheduler.set_observer(obs.clone() as Arc<dyn Observer>);
 
     let case = Case::new("case_sched".into(), "sess".into(), "finish_wf".into());
-    let mut env = SchedulerEnvironment::new("sess", vec![case]);
+    let mut env = SchedulerEnvironment::from_session_id("sess", vec![case]);
 
     let mut registry = WorkflowRegistry::new();
     registry.register("finish_wf", |_| Box::new(FinishWorkflowV2));
@@ -289,7 +289,7 @@ async fn scheduler_without_observer_still_works() {
 
     let mut scheduler = SchedulerV2::new();
     let case = Case::new("case_no_obs".into(), "sess".into(), "finish_wf".into());
-    let mut env = SchedulerEnvironment::new("sess", vec![case]);
+    let mut env = SchedulerEnvironment::from_session_id("sess", vec![case]);
 
     let mut registry = WorkflowRegistry::new();
     registry.register("finish_wf", |_| Box::new(FinishWorkflowV2));

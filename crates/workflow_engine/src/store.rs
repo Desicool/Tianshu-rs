@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 
 use crate::case::Case;
+use crate::session::Session;
 
 // ── CaseStore ────────────────────────────────────────────────────────────────
 
@@ -29,6 +30,31 @@ pub trait CaseStore: Send + Sync {
     }
 }
 
+// ── SessionStore ─────────────────────────────────────────────────────────────
+
+/// Manages session lifecycle.
+///
+/// Sessions group related workflow cases. This is a minimal abstraction —
+/// the engine only needs basic CRUD. Users should implement this trait to
+/// match their business-specific schema, since session structure is highly
+/// coupled to business logic.
+#[async_trait]
+pub trait SessionStore: Send + Sync {
+    /// Insert or update a session record.
+    async fn upsert(&self, session: &Session) -> Result<()>;
+
+    /// Fetch a session by its unique ID.
+    async fn get(&self, session_id: &str) -> Result<Option<Session>>;
+
+    /// Delete a session by its unique ID.
+    async fn delete(&self, session_id: &str) -> Result<()>;
+
+    /// Optional: create tables / collections / indexes on first use.
+    async fn setup(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
 // ── StateStore ───────────────────────────────────────────────────────────────
 
 /// A single workflow state entry: one step's persisted data for one case.
@@ -37,6 +63,16 @@ pub struct StateEntry {
     pub case_key: String,
     pub step: String,
     /// JSON-serialized (or otherwise encoded) workflow data.
+    pub data: String,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// A session-scoped state entry: shared data across all cases in a session.
+#[derive(Debug, Clone)]
+pub struct SessionStateEntry {
+    pub session_id: String,
+    pub step: String,
+    /// JSON-serialized workflow data.
     pub data: String,
     pub updated_at: DateTime<Utc>,
 }
@@ -61,6 +97,43 @@ pub trait StateStore: Send + Sync {
 
     /// Delete all state entries for a case (cleanup when workflow finishes).
     async fn delete_by_case(&self, case_key: &str) -> Result<()>;
+
+    // ── Session-scoped state (cross-case variables) ────────────────────────
+
+    /// Save session-scoped state for a specific session + step pair.
+    ///
+    /// No engine-level locking is provided. Workflows are responsible for
+    /// their own concurrency control when using session-scoped variables.
+    async fn save_session(&self, _session_id: &str, _step: &str, _data: &str) -> Result<()> {
+        Err(anyhow::anyhow!(
+            "session-scoped state not supported by this store"
+        ))
+    }
+
+    /// Fetch session-scoped state for a specific session + step.
+    async fn get_session(
+        &self,
+        _session_id: &str,
+        _step: &str,
+    ) -> Result<Option<SessionStateEntry>> {
+        Err(anyhow::anyhow!(
+            "session-scoped state not supported by this store"
+        ))
+    }
+
+    /// Fetch all session-scoped state entries for a session.
+    async fn get_all_session(&self, _session_id: &str) -> Result<Vec<SessionStateEntry>> {
+        Err(anyhow::anyhow!(
+            "session-scoped state not supported by this store"
+        ))
+    }
+
+    /// Delete all session-scoped state entries for a session.
+    async fn delete_by_session(&self, _session_id: &str) -> Result<()> {
+        Err(anyhow::anyhow!(
+            "session-scoped state not supported by this store"
+        ))
+    }
 
     /// Optional: create tables / collections / indexes on first use.
     async fn setup(&self) -> Result<()> {
@@ -103,6 +176,37 @@ impl CaseStore for InMemoryCaseStore {
     }
 }
 
+// ── InMemorySessionStore ─────────────────────────────────────────────────────
+
+/// In-memory SessionStore for development and testing.
+///
+/// This is a reference implementation. Production users should implement
+/// `SessionStore` with their business-specific schema.
+#[derive(Default)]
+pub struct InMemorySessionStore {
+    sessions: RwLock<HashMap<String, Session>>,
+}
+
+#[async_trait]
+impl SessionStore for InMemorySessionStore {
+    async fn upsert(&self, session: &Session) -> Result<()> {
+        let mut guard = self.sessions.write().unwrap();
+        guard.insert(session.session_id.clone(), session.clone());
+        Ok(())
+    }
+
+    async fn get(&self, session_id: &str) -> Result<Option<Session>> {
+        let guard = self.sessions.read().unwrap();
+        Ok(guard.get(session_id).cloned())
+    }
+
+    async fn delete(&self, session_id: &str) -> Result<()> {
+        let mut guard = self.sessions.write().unwrap();
+        guard.remove(session_id);
+        Ok(())
+    }
+}
+
 // ── InMemoryStateStore ───────────────────────────────────────────────────────
 
 /// In-memory StateStore for development and testing.
@@ -112,6 +216,8 @@ impl CaseStore for InMemoryCaseStore {
 pub struct InMemoryStateStore {
     // (case_key, step) → StateEntry
     entries: RwLock<HashMap<(String, String), StateEntry>>,
+    // (session_id, step) → SessionStateEntry
+    session_entries: RwLock<HashMap<(String, String), SessionStateEntry>>,
 }
 
 #[async_trait]
@@ -150,6 +256,43 @@ impl StateStore for InMemoryStateStore {
     async fn delete_by_case(&self, case_key: &str) -> Result<()> {
         let mut guard = self.entries.write().unwrap();
         guard.retain(|(ck, _), _| ck != case_key);
+        Ok(())
+    }
+
+    async fn save_session(&self, session_id: &str, step: &str, data: &str) -> Result<()> {
+        let mut guard = self.session_entries.write().unwrap();
+        guard.insert(
+            (session_id.to_string(), step.to_string()),
+            SessionStateEntry {
+                session_id: session_id.to_string(),
+                step: step.to_string(),
+                data: data.to_string(),
+                updated_at: Utc::now(),
+            },
+        );
+        Ok(())
+    }
+
+    async fn get_session(&self, session_id: &str, step: &str) -> Result<Option<SessionStateEntry>> {
+        let guard = self.session_entries.read().unwrap();
+        Ok(guard
+            .get(&(session_id.to_string(), step.to_string()))
+            .cloned())
+    }
+
+    async fn get_all_session(&self, session_id: &str) -> Result<Vec<SessionStateEntry>> {
+        let guard = self.session_entries.read().unwrap();
+        let result = guard
+            .values()
+            .filter(|e| e.session_id == session_id)
+            .cloned()
+            .collect();
+        Ok(result)
+    }
+
+    async fn delete_by_session(&self, session_id: &str) -> Result<()> {
+        let mut guard = self.session_entries.write().unwrap();
+        guard.retain(|(sid, _), _| sid != session_id);
         Ok(())
     }
 }

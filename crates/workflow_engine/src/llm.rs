@@ -10,7 +10,7 @@ pub struct LlmMessage {
 }
 
 /// Request sent to an LLM provider.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LlmRequest {
     pub model: String,
     pub system_prompt: Option<String>,

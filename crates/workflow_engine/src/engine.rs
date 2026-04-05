@@ -5,6 +5,7 @@ use tracing::{error, info, warn};
 
 use crate::case::{Case, ExecutionState};
 use crate::context::WorkflowContext;
+use crate::observe::Observer;
 use crate::poll::{PollEvaluator, ResourceFetcher};
 use crate::registry::WorkflowRegistry;
 use crate::store::{CaseStore, StateStore};
@@ -48,13 +49,25 @@ pub struct SchedulerV2 {
     /// Tracks which case_keys were woken up during the current tick
     /// to avoid duplicate execution.
     woken_keys: Vec<String>,
+    /// Optional observer injected into every WorkflowContext created by this scheduler.
+    observer: Option<Arc<dyn Observer>>,
 }
 
 impl SchedulerV2 {
     pub fn new() -> Self {
         Self {
             woken_keys: Vec::new(),
+            observer: None,
         }
+    }
+
+    /// Attach an observer that will be injected into every WorkflowContext.
+    ///
+    /// Call this once after construction; the observer is shared (cloned via Arc)
+    /// into each context created during `tick()`. The `tick()` signature is unchanged.
+    pub fn set_observer(&mut self, observer: Arc<dyn Observer>) -> &mut Self {
+        self.observer = Some(observer);
+        self
     }
 
     /// Run one scheduler tick across all cases in the environment.
@@ -122,6 +135,9 @@ impl SchedulerV2 {
                 Arc::clone(&case_store),
                 Arc::clone(&state_store),
             );
+            if let Some(obs) = &self.observer {
+                ctx.set_observer(Arc::clone(obs));
+            }
 
             match wf.run(&mut ctx).await {
                 Ok(WorkflowResult::Waiting(polls)) => {
@@ -221,6 +237,9 @@ impl SchedulerV2 {
                 Arc::clone(&case_store),
                 Arc::clone(&state_store),
             );
+            if let Some(obs) = &self.observer {
+                ctx.set_observer(Arc::clone(obs));
+            }
 
             match wf.run(&mut ctx).await {
                 Ok(WorkflowResult::Continue) => {

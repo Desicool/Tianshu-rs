@@ -1,10 +1,13 @@
 use anyhow::Result;
+use chrono::Utc;
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Instant;
 use tracing::{error, info};
 
 use crate::case::{Case, ExecutionState};
+use crate::observe::{Observer, StepRecord, WorkflowRecord};
 use crate::store::{CaseStore, StateStore};
 
 /// WorkflowContext provides checkpoint management and automatic cleanup
@@ -21,6 +24,15 @@ pub struct WorkflowContext {
 
     case_store: Arc<dyn CaseStore>,
     state_store: Arc<dyn StateStore>,
+
+    /// Optional observer for collecting step/workflow/LLM data.
+    observer: Option<Arc<dyn Observer>>,
+    /// Step records accumulated in this tick (cleared by `finish()`).
+    step_records: Vec<StepRecord>,
+    /// When this context was created (for workflow duration tracking).
+    tick_start: Instant,
+    /// Snapshot of `case.resource_data` at context creation time.
+    initial_resource_data: Option<JsonValue>,
 }
 
 impl WorkflowContext {
@@ -29,12 +41,27 @@ impl WorkflowContext {
         case_store: Arc<dyn CaseStore>,
         state_store: Arc<dyn StateStore>,
     ) -> Self {
+        let initial_resource_data = case.resource_data.clone();
         Self {
             case,
             checkpoint_cache: HashMap::new(),
             case_store,
             state_store,
+            observer: None,
+            step_records: Vec::new(),
+            tick_start: Instant::now(),
+            initial_resource_data,
         }
+    }
+
+    /// Attach an observer to this context. Must be called before any steps run.
+    pub fn set_observer(&mut self, observer: Arc<dyn Observer>) {
+        self.observer = Some(observer);
+    }
+
+    /// Returns all step records accumulated in this tick.
+    pub fn step_records(&self) -> &[StepRecord] {
+        &self.step_records
     }
 
     // ── Internal key helpers ─────────────────────────────────────────────────
@@ -144,12 +171,32 @@ impl WorkflowContext {
         Fut: std::future::Future<Output = Result<T>>,
         T: serde::Serialize + serde::de::DeserializeOwned,
     {
+        let step_start = Instant::now();
+        let input_snapshot = self.case.resource_data.clone();
+        let timestamp = Utc::now();
+
         if let Some(cached) = self.get_checkpoint(step_name).await? {
             if !cached.is_null() {
                 info!(
                     "Restoring checkpoint: case_key={}, step={}",
                     self.case.case_key, step_name
                 );
+                let duration_ms = step_start.elapsed().as_millis() as u64;
+                let record = StepRecord {
+                    case_key: self.case.case_key.clone(),
+                    workflow_code: self.case.workflow_code.clone(),
+                    step_name: step_name.to_string(),
+                    input_resource_data: input_snapshot,
+                    output: Some(cached.clone()),
+                    duration_ms,
+                    timestamp,
+                    cached: true,
+                    error: None,
+                };
+                self.step_records.push(record.clone());
+                if let Some(obs) = &self.observer {
+                    obs.on_step(&record).await;
+                }
                 return Ok(serde_json::from_value(cached)?);
             }
         }
@@ -158,7 +205,43 @@ impl WorkflowContext {
             "Executing step: case_key={}, step={}",
             self.case.case_key, step_name
         );
-        let result = f(self).await?;
+        let exec_result = f(self).await;
+        let duration_ms = step_start.elapsed().as_millis() as u64;
+
+        let record = match &exec_result {
+            Ok(val) => {
+                let value = serde_json::to_value(val)?;
+                StepRecord {
+                    case_key: self.case.case_key.clone(),
+                    workflow_code: self.case.workflow_code.clone(),
+                    step_name: step_name.to_string(),
+                    input_resource_data: input_snapshot,
+                    output: Some(value),
+                    duration_ms,
+                    timestamp,
+                    cached: false,
+                    error: None,
+                }
+            }
+            Err(e) => StepRecord {
+                case_key: self.case.case_key.clone(),
+                workflow_code: self.case.workflow_code.clone(),
+                step_name: step_name.to_string(),
+                input_resource_data: input_snapshot,
+                output: None,
+                duration_ms,
+                timestamp,
+                cached: false,
+                error: Some(e.to_string()),
+            },
+        };
+
+        self.step_records.push(record.clone());
+        if let Some(obs) = &self.observer {
+            obs.on_step(&record).await;
+        }
+
+        let result = exec_result?;
         let value = serde_json::to_value(&result)?;
         self.save_checkpoint(step_name, value).await?;
         Ok(result)
@@ -253,7 +336,29 @@ impl WorkflowContext {
             }
         }
 
+        // Emit workflow-complete record before clearing state.
+        if let Some(obs) = &self.observer {
+            let finished_at = Utc::now();
+            let total_duration_ms = self.tick_start.elapsed().as_millis() as u64;
+            let wf_record = WorkflowRecord {
+                case_key: self.case.case_key.clone(),
+                session_id: self.case.session_id.clone(),
+                workflow_code: self.case.workflow_code.clone(),
+                input_resource_data: self.initial_resource_data.clone(),
+                output_resource_data: self.case.resource_data.clone(),
+                finished_type: self.case.finished_type.clone(),
+                finished_description: self.case.finished_description.clone(),
+                steps: self.step_records.clone(),
+                total_duration_ms,
+                started_at: self.case.created_at,
+                finished_at,
+            };
+            obs.on_workflow_complete(&wf_record).await;
+            obs.flush().await;
+        }
+
         self.checkpoint_cache.clear();
+        self.step_records.clear();
 
         info!("Workflow finished: case_key={}", self.case.case_key);
         Ok(())

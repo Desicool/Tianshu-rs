@@ -11,6 +11,7 @@ path = "src/main.rs"
 [dependencies]
 workflow_engine = { path = "../../crates/workflow_engine" }
 workflow_engine_llm_openai = { path = "../../crates/workflow_engine_llm_openai" }
+workflow_engine_observe = { path = "../../crates/workflow_engine_observe" }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

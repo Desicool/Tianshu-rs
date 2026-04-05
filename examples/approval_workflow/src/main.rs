@@ -1,10 +1,12 @@
 //! Approval workflow orchestrator.
 //!
-//! Demonstrates running the workflow engine with in-memory stores.
+//! Demonstrates running the workflow engine with in-memory stores and observability.
 //! Pass `--postgres <DATABASE_URL>` to use PostgreSQL instead.
+//! Pass `--jsonl <PATH>` to write traces to a JSONL file.
 //!
 //! Usage:
 //!   cargo run -p approval_workflow
+//!   cargo run -p approval_workflow -- --jsonl /tmp/traces.jsonl
 //!   cargo run -p approval_workflow -- --postgres postgres://user:pass@localhost/db
 use std::sync::Arc;
 use std::time::Duration;
@@ -18,6 +20,10 @@ use workflow_engine::{
     poll::ResourceFetcher,
     store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateStore},
     WorkflowRegistry,
+};
+use workflow_engine_observe::{
+    dataset::{llm_dataset, step_dataset, workflow_dataset},
+    InMemoryObserver, JsonlObserver, CompositeObserver,
 };
 
 use approval_workflow::register_workflows;
@@ -97,6 +103,25 @@ async fn main() -> Result<()> {
 
     let event_bus = Arc::new(EventBus::default());
 
+    // ── Observability setup ───────────────────────────────────────────────────
+    // Always attach an InMemoryObserver for post-run reporting.
+    // Optionally also write to a JSONL file for RLHF dataset building.
+    let memory_obs = Arc::new(InMemoryObserver::new());
+    let jsonl_path = args.windows(2)
+        .find(|w| w[0] == "--jsonl")
+        .map(|w| w[1].clone());
+
+    let observer: Arc<dyn workflow_engine::Observer> = if let Some(path) = &jsonl_path {
+        let jsonl_obs = JsonlObserver::new(path).await?;
+        info!("Writing traces to JSONL: {}", path);
+        Arc::new(CompositeObserver::new(vec![
+            memory_obs.clone(),
+            Arc::new(jsonl_obs),
+        ]))
+    } else {
+        memory_obs.clone()
+    };
+
     // Create a sample case
     let case_key = "approval_demo_001";
     let mut case = Case::new(case_key.into(), "demo_session".into(), "approval".into());
@@ -108,6 +133,7 @@ async fn main() -> Result<()> {
 
     let mut env = SchedulerEnvironment::new("demo_session", vec![case]);
     let mut scheduler = SchedulerV2::new();
+    scheduler.set_observer(observer);
 
     info!("Starting approval workflow demo");
 
@@ -149,6 +175,41 @@ async fn main() -> Result<()> {
         final_case.finished_type,
         final_case.finished_description
     );
+
+    // ── Observability report ──────────────────────────────────────────────────
+    // Print a summary of what was collected by the InMemoryObserver.
+    let step_records = memory_obs.step_records();
+    let workflow_records = memory_obs.workflow_records();
+    let llm_records = memory_obs.llm_records();
+
+    info!("--- Observability Summary ---");
+    info!("  Steps recorded:     {}", step_records.len());
+    info!("  Workflows finished: {}", workflow_records.len());
+    info!("  LLM calls recorded: {}", llm_records.len());
+
+    // Show each step with cached/fresh distinction
+    for sr in &step_records {
+        info!(
+            "  step '{}': cached={}, duration={}ms, error={:?}",
+            sr.step_name, sr.cached, sr.duration_ms, sr.error
+        );
+    }
+
+    // Extract RLHF dataset entries (only fresh, successful steps)
+    let step_entries = step_dataset(&step_records);
+    let wf_entries = workflow_dataset(&workflow_records);
+    let llm_entries = llm_dataset(&llm_records);
+
+    info!(
+        "  RLHF-ready step entries (non-cached): {}",
+        step_entries.len()
+    );
+    info!("  RLHF-ready workflow entries: {}", wf_entries.len());
+    info!("  RLHF-ready LLM call entries: {}", llm_entries.len());
+
+    if let Some(path) = &jsonl_path {
+        info!("Full traces written to: {}", path);
+    }
 
     Ok(())
 }

@@ -1,0 +1,19 @@
+[package]
+name = "workflow_engine_observe"
+version = "0.1.0"
+edition = "2021"
+description = "Observer implementations for the Tianshu workflow engine"
+
+[dependencies]
+workflow_engine = { path = "../workflow_engine" }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["full"] }

@@ -39,6 +39,7 @@ dependencies = [
  "tracing-subscriber",
  "workflow_engine",
  "workflow_engine_llm_openai",
+ "workflow_engine_observe",
 ]
 
 [[package]]
@@ -2023,6 +2024,21 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "tokio",
+ "tracing",
+ "workflow_engine",
+]
+
+[[package]]
+name = "workflow_engine_observe"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
  "workflow_engine",

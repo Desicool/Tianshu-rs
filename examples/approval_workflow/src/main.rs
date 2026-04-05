@@ -159,8 +159,8 @@ async fn main() -> Result<()> {
             .collect();
 
         let session = Session::new("parallel_session");
-        let mut env = SchedulerEnvironment::new(session, cases)
-            .with_execution_mode(ExecutionMode::Parallel);
+        let mut env =
+            SchedulerEnvironment::new(session, cases).with_execution_mode(ExecutionMode::Parallel);
         let mut scheduler = SchedulerV2::new();
         scheduler.set_observer(observer.clone());
 

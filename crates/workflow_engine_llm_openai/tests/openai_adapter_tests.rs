@@ -55,9 +55,15 @@ fn llm_request_construction() {
         messages: vec![LlmMessage {
             role: "user".into(),
             content: "Hello".into(),
+
+            tool_calls: None,
+
+            tool_call_id: None,
         }],
         temperature: Some(0.7),
         max_tokens: Some(100),
+
+        tools: None,
     };
     assert_eq!(req.model, "gpt-4o");
     assert_eq!(req.messages.len(), 1);

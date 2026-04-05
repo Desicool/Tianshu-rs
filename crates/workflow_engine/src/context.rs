@@ -7,8 +7,14 @@ use std::time::Instant;
 use tracing::{error, info};
 
 use crate::case::{Case, ExecutionState};
+use crate::compact::ManagedConversation;
+use crate::llm::{LlmProvider, LlmRequest};
 use crate::observe::{Observer, StepRecord, WorkflowRecord};
+use crate::retry::RetryPolicy;
+use crate::spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
 use crate::store::{CaseStore, StateStore};
+use crate::tool::ToolRegistry;
+use crate::tool_loop::{run_tool_loop, ToolLoopConfig, ToolLoopResult};
 
 /// WorkflowContext provides checkpoint management and automatic cleanup
 /// for workflow execution.
@@ -33,6 +39,9 @@ pub struct WorkflowContext {
     tick_start: Instant,
     /// Snapshot of `case.resource_data` at context creation time.
     initial_resource_data: Option<JsonValue>,
+
+    /// Optional managed conversation for automatic context compaction.
+    managed_conversation: Option<ManagedConversation>,
 }
 
 impl WorkflowContext {
@@ -51,6 +60,7 @@ impl WorkflowContext {
             step_records: Vec::new(),
             tick_start: Instant::now(),
             initial_resource_data,
+            managed_conversation: None,
         }
     }
 
@@ -354,6 +364,142 @@ impl WorkflowContext {
             self.case.session_id, name
         );
         Ok(())
+    }
+
+    // ── Child workflow spawning ────────────────────────────────────────────
+
+    /// Spawn a child workflow. The child is immediately created in Running state.
+    pub async fn spawn_child(&mut self, config: SpawnConfig) -> Result<ChildHandle> {
+        let child_key = config.case_key.unwrap_or_else(|| {
+            format!(
+                "{}_{}_child_{}",
+                self.case.case_key,
+                chrono::Utc::now().timestamp_millis(),
+                config.workflow_code
+            )
+        });
+
+        let mut child = Case::new(
+            child_key.clone(),
+            self.case.session_id.clone(),
+            config.workflow_code.clone(),
+        );
+        child.parent_key = Some(self.case.case_key.clone());
+        child.resource_data = config.resource_data;
+
+        self.case_store.upsert(&child).await?;
+        self.case.child_keys.push(child_key.clone());
+        self.case_store.upsert(&self.case).await?;
+
+        Ok(ChildHandle {
+            case_key: child_key,
+            workflow_code: config.workflow_code,
+        })
+    }
+
+    /// Spawn multiple child workflows at once.
+    pub async fn spawn_children(&mut self, configs: Vec<SpawnConfig>) -> Result<Vec<ChildHandle>> {
+        let mut handles = Vec::new();
+        for config in configs {
+            handles.push(self.spawn_child(config).await?);
+        }
+        Ok(handles)
+    }
+
+    /// Check the status of a single child workflow.
+    pub async fn child_status(&self, handle: &ChildHandle) -> Result<ChildStatus> {
+        match self.case_store.get_by_key(&handle.case_key).await? {
+            None => Ok(ChildStatus::Failed {
+                error: format!("child case '{}' not found", handle.case_key),
+            }),
+            Some(child) => Ok(match child.execution_state {
+                ExecutionState::Running => ChildStatus::Running,
+                ExecutionState::Waiting => ChildStatus::Waiting,
+                ExecutionState::Finished => ChildStatus::Finished {
+                    finished_type: child.finished_type.unwrap_or_default(),
+                    finished_description: child.finished_description.unwrap_or_default(),
+                    resource_data: child.resource_data,
+                },
+            }),
+        }
+    }
+
+    /// Check all children. Returns Pending if any are still in-flight, AllDone when all finish.
+    pub async fn await_children(&self, handles: &[ChildHandle]) -> Result<ChildrenResult> {
+        let mut statuses = Vec::new();
+        let mut pending = 0;
+        for handle in handles {
+            let status = self.child_status(handle).await?;
+            match &status {
+                ChildStatus::Running | ChildStatus::Waiting => pending += 1,
+                _ => {}
+            }
+            statuses.push((handle.clone(), status));
+        }
+        if pending > 0 {
+            Ok(ChildrenResult::Pending(pending))
+        } else {
+            Ok(ChildrenResult::AllDone(statuses))
+        }
+    }
+
+    // ── Retry-aware step execution ───────────────────────────────────────────
+
+    /// Like [`step()`], but applies `policy` to the closure execution.
+    ///
+    /// Checkpoint semantics are preserved: once the step succeeds, its result
+    /// is cached and never retried, even across process restarts.
+    pub async fn step_with_retry<F, Fut, T>(
+        &mut self,
+        step_name: &str,
+        policy: &RetryPolicy,
+        f: F,
+    ) -> Result<T>
+    where
+        F: Fn() -> Fut,
+        Fut: std::future::Future<Output = Result<T>>,
+        T: serde::Serialize + serde::de::DeserializeOwned,
+    {
+        let policy_clone = policy;
+        self.step(step_name, |_ctx| async move {
+            crate::retry::with_retry(policy_clone, |_retry_ctx| f()).await
+        })
+        .await
+    }
+
+    // ── Tool-use step ────────────────────────────────────────────────────────
+
+    /// Execute a tool-use step with automatic checkpointing.
+    ///
+    /// Calls the LLM with the given tools, runs the tool loop until the model
+    /// produces a final text response or `config.max_rounds` is exhausted, and
+    /// checkpoints the entire result so the step is never re-executed.
+    pub async fn tool_step(
+        &mut self,
+        step_name: &str,
+        llm: &dyn LlmProvider,
+        tools: &ToolRegistry,
+        request: LlmRequest,
+        config: &ToolLoopConfig,
+    ) -> Result<ToolLoopResult> {
+        let observer_ref = self.observer.as_deref();
+        let result = run_tool_loop(llm, request, tools, config, observer_ref).await?;
+        // Checkpoint the final text so we never re-run on restart.
+        self.save_checkpoint(step_name, serde_json::to_value(&result.final_text)?)
+            .await?;
+        Ok(result)
+    }
+
+    // ── Managed conversation ─────────────────────────────────────────────────
+
+    /// Attach a `ManagedConversation` for automatic context compaction.
+    pub fn set_managed_conversation(&mut self, conv: ManagedConversation) {
+        self.managed_conversation = Some(conv);
+    }
+
+    /// Access the managed conversation (if one was set).
+    pub fn managed_conversation(&mut self) -> Option<&mut ManagedConversation> {
+        self.managed_conversation.as_mut()
     }
 
     // ── Workflow completion ──────────────────────────────────────────────────

@@ -54,6 +54,35 @@ pub struct WorkflowRecord {
     pub finished_at: DateTime<Utc>,
 }
 
+/// Record of a single tool call execution.
+///
+/// Emitted by `run_tool_loop()` via `Observer::on_tool_call()`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCallRecord {
+    pub case_key: String,
+    pub step_name: Option<String>,
+    pub tool_name: String,
+    pub call_id: String,
+    pub input: JsonValue,
+    pub output: Option<String>,
+    pub is_error: bool,
+    pub duration_ms: u64,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Record of a retry attempt.
+///
+/// Emitted via `Observer::on_retry()` when the retry loop retries after an error.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RetryRecord {
+    pub case_key: String,
+    pub step_name: Option<String>,
+    pub attempt: u32,
+    pub error_class: String,
+    pub error_message: String,
+    pub timestamp: DateTime<Utc>,
+}
+
 /// Record of a single LLM call.
 ///
 /// Emitted via `observe_llm_call()` or `ObservedLlmProvider`.
@@ -110,6 +139,16 @@ pub trait Observer: Send + Sync {
 
     /// Called after each LLM call tracked via `observe_llm_call` or `ObservedLlmProvider`.
     async fn on_llm_call(&self, record: &LlmCallRecord) {
+        let _ = record;
+    }
+
+    /// Called after each tool call execution in a tool-use loop.
+    async fn on_tool_call(&self, record: &ToolCallRecord) {
+        let _ = record;
+    }
+
+    /// Called when a retry occurs during error recovery.
+    async fn on_retry(&self, record: &RetryRecord) {
         let _ = record;
     }
 
@@ -286,6 +325,8 @@ mod tests {
                     completion_tokens: 5,
                 },
                 finish_reason: "stop".into(),
+
+                tool_calls: None,
             })
         }
     }
@@ -305,9 +346,15 @@ mod tests {
             messages: vec![crate::llm::LlmMessage {
                 role: "user".into(),
                 content: "Hello".into(),
+
+                tool_calls: None,
+
+                tool_call_id: None,
             }],
             temperature: Some(0.7),
             max_tokens: Some(100),
+
+            tools: None,
         }
     }
 

@@ -1,32 +1,52 @@
 pub mod case;
+pub mod compact;
 pub mod context;
 pub mod engine;
 pub mod llm;
+pub mod llm_resilient;
 pub mod observe;
 pub mod poll;
 pub mod registry;
+pub mod retry;
 pub mod session;
+pub mod spawn;
 pub mod stage;
 pub mod store;
+pub mod token;
+pub mod tool;
+pub mod tool_loop;
 pub mod workflow;
 
 // Re-exports
 pub use case::{make_case, Case, ExecutionState};
+pub use compact::{
+    CompactionStrategy, LlmSummaryCompaction, ManagedConversation, TruncationCompaction,
+};
 pub use context::WorkflowContext;
 pub use engine::{
     shutdown_signal, ExecutionMode, SchedulerEnvironment, SchedulerV2, ShutdownSignal,
     ShutdownTrigger, TickResult,
 };
-pub use llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage};
+pub use llm::{
+    LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmStreamEvent, LlmTool, LlmUsage,
+    StreamingLlmProvider, ToolCall, ToolResult,
+};
+pub use llm_resilient::ResilientLlmProvider;
 pub use observe::{
-    observe_llm_call, LlmCallRecord, ObservedLlmProvider, Observer, StepRecord, WorkflowRecord,
+    observe_llm_call, LlmCallRecord, ObservedLlmProvider, Observer, RetryRecord, StepRecord,
+    ToolCallRecord, WorkflowRecord,
 };
 pub use poll::{IntentRouterV2, PollEvaluator, PollMatch, ResourceFetcher};
 pub use registry::WorkflowRegistry;
+pub use retry::{with_retry, ErrorClass, RetryContext, RetryPolicy};
 pub use session::Session;
+pub use spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
 pub use stage::{run_stages, StageBase, StageKey, StageOutcome};
 pub use store::{
     CaseStore, InMemoryCaseStore, InMemorySessionStore, InMemoryStateStore, SessionStateEntry,
     SessionStore, StateEntry, StateStore,
 };
+pub use token::{CharTokenCounter, ContextConfig, TokenCounter};
+pub use tool::{Tool, ToolRegistry, ToolSafety};
+pub use tool_loop::{run_tool_loop, ToolLoopConfig, ToolLoopResult};
 pub use workflow::{BaseWorkflow, PollPredicate, WorkflowResult};

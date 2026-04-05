@@ -134,9 +134,12 @@ impl IntentRouterV2 {
                 messages: vec![LlmMessage {
                     role: "user".into(),
                     content: user_prompt,
+                    tool_calls: None,
+                    tool_call_id: None,
                 }],
                 temperature: Some(0.0),
                 max_tokens: Some(64),
+                tools: None,
             })
             .await?;
 
@@ -268,6 +271,8 @@ mod tests {
                         completion_tokens: 1,
                     },
                     finish_reason: "stop".into(),
+
+                    tool_calls: None,
                 })
             }
         }

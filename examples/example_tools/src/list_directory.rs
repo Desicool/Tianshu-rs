@@ -48,10 +48,7 @@ impl Tool for ListDirectoryTool {
             .await
             .context("error reading directory entry")?
         {
-            let file_type = entry
-                .file_type()
-                .await
-                .context("error getting file type")?;
+            let file_type = entry.file_type().await.context("error getting file type")?;
             let kind = if file_type.is_dir() {
                 "dir"
             } else if file_type.is_symlink() {
@@ -96,10 +93,7 @@ mod tests {
             .unwrap();
 
         let tool = ListDirectoryTool;
-        let result = tool
-            .execute(json!({"path": dir_path}))
-            .await
-            .unwrap();
+        let result = tool.execute(json!({"path": dir_path})).await.unwrap();
 
         assert!(result.contains("file_a.txt (file)"));
         assert!(result.contains("file_b.txt (file)"));
@@ -112,10 +106,7 @@ mod tests {
         let dir_path = tmp_dir.path().to_str().unwrap().to_string();
 
         let tool = ListDirectoryTool;
-        let result = tool
-            .execute(json!({"path": dir_path}))
-            .await
-            .unwrap();
+        let result = tool.execute(json!({"path": dir_path})).await.unwrap();
         assert_eq!(result, "(empty directory)");
     }
 

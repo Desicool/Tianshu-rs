@@ -123,10 +123,7 @@ mod tests {
     #[tokio::test]
     async fn write_file_missing_path_returns_error() {
         let tool = WriteFileTool;
-        let err = tool
-            .execute(json!({"content": "hello"}))
-            .await
-            .unwrap_err();
+        let err = tool.execute(json!({"content": "hello"})).await.unwrap_err();
         assert!(err.to_string().contains("missing required field"));
     }
 }

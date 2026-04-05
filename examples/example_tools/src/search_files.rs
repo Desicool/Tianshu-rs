@@ -55,9 +55,7 @@ impl Tool for SearchFilesTool {
                 .output(),
         )
         .await
-        .map_err(|_| {
-            anyhow::anyhow!("search timed out after {} seconds", SEARCH_TIMEOUT_SECS)
-        })?
+        .map_err(|_| anyhow::anyhow!("search timed out after {} seconds", SEARCH_TIMEOUT_SECS))?
         .context("failed to run grep")?;
 
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -108,10 +106,7 @@ mod tests {
     #[tokio::test]
     async fn search_files_missing_pattern_returns_error() {
         let tool = SearchFilesTool;
-        let err = tool
-            .execute(json!({"path": "/tmp"}))
-            .await
-            .unwrap_err();
+        let err = tool.execute(json!({"path": "/tmp"})).await.unwrap_err();
         assert!(err.to_string().contains("missing required field"));
     }
 }

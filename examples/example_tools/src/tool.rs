@@ -236,12 +236,10 @@ pub async fn run_tool_loop(
         }
 
         // Append assistant message with tool calls.
-        request
-            .messages
-            .push(LlmMessage::assistant_with_tool_calls(
-                response.content,
-                tool_calls,
-            ));
+        request.messages.push(LlmMessage::assistant_with_tool_calls(
+            response.content,
+            tool_calls,
+        ));
         // Append tool results.
         request.messages.push(LlmMessage::tool_results(results));
     }
@@ -498,9 +496,7 @@ mod tests {
     async fn run_tool_loop_stop_immediately_no_tools_called() {
         let llm = MockLlmProvider::new(vec![stop_response("Hello world")]);
         let reg = ToolRegistry::new();
-        let (text, messages) = run_tool_loop(&llm, make_request(), &reg, 3)
-            .await
-            .unwrap();
+        let (text, messages) = run_tool_loop(&llm, make_request(), &reg, 3).await.unwrap();
         assert_eq!(text, "Hello world");
         // No tool messages appended — just the original user message.
         assert_eq!(messages.len(), 1);
@@ -521,9 +517,7 @@ mod tests {
             stop_response("Final answer"),
         ]);
 
-        let (text, messages) = run_tool_loop(&llm, make_request(), &reg, 3)
-            .await
-            .unwrap();
+        let (text, messages) = run_tool_loop(&llm, make_request(), &reg, 3).await.unwrap();
 
         assert_eq!(text, "Final answer");
         // user + assistant-with-tool-calls + tool-results = 3 messages
@@ -587,9 +581,7 @@ mod tests {
             stop_response("All done"),
         ]);
 
-        let (text, messages) = run_tool_loop(&llm, make_request(), &reg, 3)
-            .await
-            .unwrap();
+        let (text, messages) = run_tool_loop(&llm, make_request(), &reg, 3).await.unwrap();
 
         assert_eq!(text, "All done");
 

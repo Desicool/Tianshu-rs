@@ -167,11 +167,11 @@ impl BaseWorkflow for LeaderWorkflow {
             })
             .await?;
 
-        let answer_clone = final_answer.clone();
+        let finished_answer = final_answer.clone();
         ctx.finish("completed".to_string(), final_answer).await?;
         Ok(WorkflowResult::Finished(
             "completed".to_string(),
-            answer_clone,
+            finished_answer,
         ))
     }
 }

@@ -33,7 +33,13 @@ async fn main() -> Result<()> {
 
     let api_key = std::env::var("OPENAI_API_KEY").unwrap_or_else(|_| "sk-dummy".to_string());
     let model = std::env::var("OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
-    let llm = Arc::new(OpenAiProvider::new(api_key, model.clone()));
+    let base_url = std::env::var("OPENAI_BASE_URL").ok();
+    let llm = Arc::new(match base_url {
+        Some(url) => OpenAiProvider::builder(api_key, model.clone())
+            .base_url(url)
+            .build(),
+        None => OpenAiProvider::new(api_key, model.clone()),
+    });
 
     let mut registry = WorkflowRegistry::new();
     register_workflows(&mut registry, llm, model);

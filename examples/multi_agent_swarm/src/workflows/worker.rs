@@ -90,11 +90,11 @@ impl BaseWorkflow for WorkerWorkflow {
         ctx.set_session_state(&format!("worker_result_{}", worker_id), result.clone())
             .await?;
 
-        let result_clone = result.clone();
+        let finished_result = result.clone();
         ctx.finish("completed".to_string(), result).await?;
         Ok(WorkflowResult::Finished(
             "completed".to_string(),
-            result_clone,
+            finished_result,
         ))
     }
 }

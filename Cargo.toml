@@ -6,6 +6,7 @@ members = [
     "crates/workflow_engine_observe",
     "examples/approval_workflow",
     "examples/example_tools",
+    "examples/plan_and_execute",
 ]
 resolver = "2"
 

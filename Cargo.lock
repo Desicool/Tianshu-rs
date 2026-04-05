@@ -982,6 +982,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
+name = "plan_and_execute"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "example_tools",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workflow_engine",
+ "workflow_engine_llm_openai",
+ "workflow_engine_observe",
+]
+
+[[package]]
 name = "postgres-protocol"
 version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1103,6 +1103,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "react_agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "example_tools",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workflow_engine",
+ "workflow_engine_llm_openai",
+ "workflow_engine_observe",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"

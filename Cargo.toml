@@ -7,6 +7,7 @@ members = [
     "examples/approval_workflow",
     "examples/example_tools",
     "examples/plan_and_execute",
+    "examples/react_agent",
 ]
 resolver = "2"
 

@@ -9,6 +9,7 @@ use serde_json::json;
 use workflow_engine::{
     BaseWorkflow, Case, InMemoryCaseStore, InMemoryStateStore, Observer,
     SchedulerV2, StepRecord, WorkflowContext, WorkflowRecord, WorkflowResult,
+    SchedulerEnvironment, WorkflowRegistry,
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -251,8 +252,6 @@ impl BaseWorkflow for FinishWorkflowV2 {
 
 #[tokio::test]
 async fn scheduler_injects_observer_into_contexts() {
-    use workflow_engine::{SchedulerEnvironment, WorkflowRegistry};
-
     let obs = RecordingObserver::new();
     let mut scheduler = SchedulerV2::new();
     scheduler.set_observer(obs.clone() as Arc<dyn Observer>);
@@ -266,7 +265,7 @@ async fn scheduler_injects_observer_into_contexts() {
     let cs = Arc::new(InMemoryCaseStore::default());
     let ss = Arc::new(InMemoryStateStore::default());
 
-    scheduler.tick(&mut env, &registry, cs, ss, None).await.unwrap();
+    scheduler.tick(&mut env, &registry, cs, ss, None, None).await.unwrap();
 
     let workflows = obs.workflows.lock().unwrap();
     assert_eq!(workflows.len(), 1);
@@ -287,9 +286,9 @@ async fn scheduler_without_observer_still_works() {
     let cs = Arc::new(InMemoryCaseStore::default());
     let ss = Arc::new(InMemoryStateStore::default());
 
-    let executed = scheduler
-        .tick(&mut env, &registry, cs, ss, None)
+    let result = scheduler
+        .tick(&mut env, &registry, cs, ss, None, None)
         .await
         .unwrap();
-    assert!(executed);
+    assert!(result.any_executed());
 }

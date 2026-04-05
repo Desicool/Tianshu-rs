@@ -123,7 +123,7 @@ impl CaseStore for PostgresCaseStore {
             .await?;
 
         rows.iter()
-            .map(|r| Self::row_to_case(r))
+            .map(Self::row_to_case)
             .collect::<Result<Vec<_>>>()
     }
 

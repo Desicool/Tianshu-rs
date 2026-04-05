@@ -301,7 +301,7 @@ impl SchedulerV2 {
 
         if let Some(fetcher) = fetcher {
             for (case_key, poll) in data_polls.iter().chain(router_polls.iter()) {
-                let matches = evaluator.evaluate(&[poll.clone()], fetcher).await;
+                let matches = evaluator.evaluate(std::slice::from_ref(poll), fetcher).await;
                 if !matches.is_empty() {
                     info!(
                         "Poll matched: case_key='{}', step='{}'",

@@ -253,3 +253,111 @@ async fn resilient_provider_escalates_max_tokens() {
     let resp = resilient.complete(make_request()).await.unwrap();
     assert_eq!(resp.content, "completed");
 }
+
+// ── Fallback deduplication tests (TDD for double-retry bug fix) ───────────────
+
+struct CountingProvider {
+    call_count: Arc<AtomicU32>,
+    response: anyhow::Result<LlmResponse>,
+}
+
+impl CountingProvider {
+    fn always_fail_overloaded(call_count: Arc<AtomicU32>) -> Self {
+        Self {
+            call_count,
+            response: Err(anyhow!("overloaded")),
+        }
+    }
+    fn always_ok(call_count: Arc<AtomicU32>, content: &str) -> Self {
+        Self {
+            call_count,
+            response: Ok(ok_response(content)),
+        }
+    }
+}
+
+#[async_trait]
+impl LlmProvider for CountingProvider {
+    async fn complete(&self, _request: LlmRequest) -> anyhow::Result<LlmResponse> {
+        self.call_count.fetch_add(1, Ordering::SeqCst);
+        match &self.response {
+            Ok(r) => Ok(r.clone()),
+            Err(e) => Err(anyhow!("{}", e)),
+        }
+    }
+}
+
+fn overloaded_policy(max_attempts: u32) -> RetryPolicy {
+    RetryPolicy {
+        max_attempts,
+        base_delay: std::time::Duration::from_millis(1),
+        max_delay: std::time::Duration::from_millis(5),
+        backoff_factor: 1.0,
+        classify: Arc::new(|e| {
+            if e.to_string().contains("overloaded") {
+                workflow_engine::retry::ErrorClass::ProviderOverloaded
+            } else {
+                workflow_engine::retry::ErrorClass::Fatal
+            }
+        }),
+    }
+}
+
+#[tokio::test]
+async fn resilient_provider_fallback_called_exactly_once_when_all_overloaded() {
+    // Primary + 2 fallbacks, all always return ProviderOverloaded.
+    // With max_attempts=3: the retry loop tries primary(0), fallback0(1), fallback1(2).
+    // The post-loop sweep should NOT re-try fallback0 or fallback1.
+    // Bug: currently the sweep re-tries all fallbacks (fallback0 gets called twice).
+    let primary_count = Arc::new(AtomicU32::new(0));
+    let fb0_count = Arc::new(AtomicU32::new(0));
+    let fb1_count = Arc::new(AtomicU32::new(0));
+
+    let primary = Arc::new(CountingProvider::always_fail_overloaded(
+        primary_count.clone(),
+    ));
+    let fallback0 = Arc::new(CountingProvider::always_fail_overloaded(fb0_count.clone()));
+    let fallback1 = Arc::new(CountingProvider::always_fail_overloaded(fb1_count.clone()));
+
+    let resilient = ResilientLlmProvider::new(primary, overloaded_policy(3))
+        .with_fallback(fallback0)
+        .with_fallback(fallback1);
+
+    let _result = resilient.complete(make_request()).await;
+
+    // Each fallback should be called exactly once — not retried in the post-loop sweep
+    assert_eq!(
+        fb0_count.load(Ordering::SeqCst),
+        1,
+        "fallback0 should be called exactly once, got {}",
+        fb0_count.load(Ordering::SeqCst)
+    );
+    assert_eq!(
+        fb1_count.load(Ordering::SeqCst),
+        1,
+        "fallback1 should be called exactly once, got {}",
+        fb1_count.load(Ordering::SeqCst)
+    );
+}
+
+#[tokio::test]
+async fn resilient_provider_fallback_succeeds_called_exactly_once() {
+    // Regression guard: primary overloaded, one fallback that succeeds.
+    // Fallback must be called exactly once (not zero times due to over-skipping).
+    let fb_count = Arc::new(AtomicU32::new(0));
+    let primary = Arc::new(CountingProvider::always_fail_overloaded(Arc::new(
+        AtomicU32::new(0),
+    )));
+    let fallback = Arc::new(CountingProvider::always_ok(fb_count.clone(), "fallback ok"));
+
+    let resilient =
+        ResilientLlmProvider::new(primary, overloaded_policy(2)).with_fallback(fallback);
+
+    let resp = resilient.complete(make_request()).await.unwrap();
+    assert_eq!(resp.content, "fallback ok");
+    assert_eq!(
+        fb_count.load(Ordering::SeqCst),
+        1,
+        "fallback should be called exactly once"
+    );
+}

@@ -1,6 +1,5 @@
 use anyhow::Result;
 use chrono::Utc;
-use std::time::Instant;
 
 use crate::llm::{LlmMessage, LlmProvider, LlmRequest};
 use crate::observe::{Observer, ToolCallRecord};
@@ -87,16 +86,14 @@ pub async fn run_tool_loop(
 
         total_tool_calls += calls.len();
 
-        // Execute tool calls with concurrency
-        let start = Instant::now();
+        // Execute tool calls with concurrency; each entry carries its own duration.
         let results = tools
             .execute_with_concurrency(&calls, config.max_concurrency)
             .await;
-        let batch_duration_ms = start.elapsed().as_millis() as u64;
 
-        // Emit observer events
+        // Emit observer events using per-tool durations
         if let Some(obs) = observer {
-            for (idx, result) in results.iter().enumerate() {
+            for (idx, (result, duration_ms)) in results.iter().enumerate() {
                 let call = &calls[idx];
                 let input: serde_json::Value =
                     serde_json::from_str(&call.arguments).unwrap_or_default();
@@ -109,7 +106,7 @@ pub async fn run_tool_loop(
                     input,
                     output: Some(result.content.clone()),
                     is_error: result.is_error,
-                    duration_ms: batch_duration_ms,
+                    duration_ms: *duration_ms,
                     timestamp: Utc::now(),
                 };
                 obs.on_tool_call(&record).await;
@@ -117,7 +114,7 @@ pub async fn run_tool_loop(
         }
 
         // Add tool result messages
-        for result in results {
+        for (result, _duration_ms) in results {
             messages.push(LlmMessage {
                 role: "tool".into(),
                 content: result.content.clone(),

@@ -99,12 +99,13 @@ impl ToolRegistry {
     ///
     /// Consecutive `ReadOnly` calls are batched and run in parallel (up to
     /// `max_concurrency`). `Exclusive` calls always run alone. Results are
-    /// returned in the same order as the input `calls`.
+    /// returned in the same order as the input `calls`, paired with the
+    /// per-tool execution duration in milliseconds.
     pub async fn execute_with_concurrency(
         &self,
         calls: &[ToolCall],
         max_concurrency: usize,
-    ) -> Vec<ToolResult> {
+    ) -> Vec<(ToolResult, u64)> {
         if calls.is_empty() {
             return vec![];
         }
@@ -121,8 +122,11 @@ impl ToolRegistry {
                 .unwrap_or(ToolSafety::Exclusive);
 
             if safety == ToolSafety::Exclusive {
-                // Run exclusive tool alone
-                results.push(self.execute_call(call).await);
+                // Run exclusive tool alone, timing its own execution
+                let start = std::time::Instant::now();
+                let result = self.execute_call(call).await;
+                let duration_ms = start.elapsed().as_millis() as u64;
+                results.push((result, duration_ms));
                 i += 1;
             } else {
                 // Gather consecutive ReadOnly calls
@@ -139,7 +143,8 @@ impl ToolRegistry {
                 }
                 let batch = &calls[batch_start..i];
 
-                // Run batch in parallel using JoinSet, capped at max_concurrency
+                // Run batch in parallel using JoinSet, capped at max_concurrency.
+                // Each task times only its own execution.
                 let semaphore = Arc::new(tokio::sync::Semaphore::new(max_concurrency));
                 let mut handles = Vec::with_capacity(batch.len());
 
@@ -152,38 +157,49 @@ impl ToolRegistry {
 
                     handles.push(tokio::spawn(async move {
                         let _permit = sem.acquire().await.unwrap();
-                        let tool = match tool {
-                            Some(t) => t,
-                            None => {
-                                return ToolResult {
+                        let start = std::time::Instant::now();
+                        let result = {
+                            let tool = match tool {
+                                Some(t) => t,
+                                None => {
+                                    return (
+                                        ToolResult {
+                                            call_id,
+                                            content: format!("unknown tool: {name}"),
+                                            is_error: true,
+                                        },
+                                        start.elapsed().as_millis() as u64,
+                                    );
+                                }
+                            };
+                            let args: JsonValue = match serde_json::from_str(&arguments) {
+                                Ok(v) => v,
+                                Err(e) => {
+                                    return (
+                                        ToolResult {
+                                            call_id,
+                                            content: format!("failed to parse arguments: {e}"),
+                                            is_error: true,
+                                        },
+                                        start.elapsed().as_millis() as u64,
+                                    );
+                                }
+                            };
+                            match tool.execute(args).await {
+                                Ok(content) => ToolResult {
                                     call_id,
-                                    content: format!("unknown tool: {name}"),
+                                    content,
+                                    is_error: false,
+                                },
+                                Err(e) => ToolResult {
+                                    call_id,
+                                    content: e.to_string(),
                                     is_error: true,
-                                };
+                                },
                             }
                         };
-                        let args: JsonValue = match serde_json::from_str(&arguments) {
-                            Ok(v) => v,
-                            Err(e) => {
-                                return ToolResult {
-                                    call_id,
-                                    content: format!("failed to parse arguments: {e}"),
-                                    is_error: true,
-                                };
-                            }
-                        };
-                        match tool.execute(args).await {
-                            Ok(content) => ToolResult {
-                                call_id,
-                                content,
-                                is_error: false,
-                            },
-                            Err(e) => ToolResult {
-                                call_id,
-                                content: e.to_string(),
-                                is_error: true,
-                            },
-                        }
+                        let duration_ms = start.elapsed().as_millis() as u64;
+                        (result, duration_ms)
                     }));
                 }
 

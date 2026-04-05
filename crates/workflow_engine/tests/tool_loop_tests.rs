@@ -2,9 +2,10 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::{json, Value as JsonValue};
 use std::collections::VecDeque;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use workflow_engine::llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage, ToolCall};
+use workflow_engine::observe::{Observer, ToolCallRecord};
 use workflow_engine::tool::{Tool, ToolRegistry, ToolSafety};
 use workflow_engine::tool_loop::{run_tool_loop, ToolLoopConfig};
 
@@ -248,4 +249,120 @@ async fn tool_loop_tool_error_continues() {
         .collect();
     assert_eq!(tool_messages.len(), 1);
     assert!(tool_messages[0].content.contains("something went wrong"));
+}
+
+// ── Observer per-tool timing test (TDD for duration_ms fix) ──────────────────
+
+struct RecordingObserver {
+    tool_records: Arc<Mutex<Vec<ToolCallRecord>>>,
+}
+
+#[async_trait]
+impl Observer for RecordingObserver {
+    async fn on_tool_call(&self, record: &ToolCallRecord) {
+        self.tool_records.lock().unwrap().push(record.clone());
+    }
+}
+
+struct SlowTool {
+    delay_ms: u64,
+}
+
+#[async_trait]
+impl Tool for SlowTool {
+    fn name(&self) -> &str {
+        "slow_tool"
+    }
+    fn description(&self) -> &str {
+        "Sleeps for a bit"
+    }
+    fn safety(&self) -> ToolSafety {
+        ToolSafety::ReadOnly
+    }
+    fn parameters_schema(&self) -> JsonValue {
+        json!({ "type": "object" })
+    }
+    async fn execute(&self, _input: JsonValue) -> Result<String> {
+        tokio::time::sleep(std::time::Duration::from_millis(self.delay_ms)).await;
+        Ok("done".into())
+    }
+}
+
+struct InstantTool;
+
+#[async_trait]
+impl Tool for InstantTool {
+    fn name(&self) -> &str {
+        "instant_tool"
+    }
+    fn description(&self) -> &str {
+        "Returns instantly"
+    }
+    fn safety(&self) -> ToolSafety {
+        ToolSafety::ReadOnly
+    }
+    fn parameters_schema(&self) -> JsonValue {
+        json!({ "type": "object" })
+    }
+    async fn execute(&self, _input: JsonValue) -> Result<String> {
+        Ok("instant".into())
+    }
+}
+
+#[tokio::test]
+async fn tool_loop_observer_records_per_tool_duration_not_batch_time() {
+    // The LLM requests two concurrent ReadOnly tools in round 1: one instant, one slow (20ms).
+    // After the fix, the observer should see distinct per-tool durations.
+    // With the bug, both records would show the same batch wall time (~20ms).
+    let slow_call = ToolCall {
+        id: "slow_id".into(),
+        name: "slow_tool".into(),
+        arguments: "{}".into(),
+    };
+    let fast_call = ToolCall {
+        id: "fast_id".into(),
+        name: "instant_tool".into(),
+        arguments: "{}".into(),
+    };
+
+    let llm = MockLlm::new(vec![
+        // Round 1: request both tools (concurrent batch)
+        tool_call_response(vec![fast_call, slow_call]),
+        // Round 2: LLM returns final text
+        text_response("all done"),
+    ]);
+
+    let mut registry = ToolRegistry::new();
+    registry.register(SlowTool { delay_ms: 20 });
+    registry.register(InstantTool);
+
+    let recorded = Arc::new(Mutex::new(Vec::new()));
+    let observer = RecordingObserver {
+        tool_records: recorded.clone(),
+    };
+
+    let config = ToolLoopConfig::default();
+    let _result = run_tool_loop(&llm, make_request(), &registry, &config, Some(&observer))
+        .await
+        .unwrap();
+
+    let records = recorded.lock().unwrap().clone();
+    assert_eq!(records.len(), 2, "expected 2 ToolCallRecords");
+
+    let fast_rec = records.iter().find(|r| r.call_id == "fast_id").unwrap();
+    let slow_rec = records.iter().find(|r| r.call_id == "slow_id").unwrap();
+
+    // Per-tool durations must differ: fast should be strictly less than slow.
+    // With the batch-time bug both would equal ~20ms and this assertion fails.
+    assert!(
+        fast_rec.duration_ms < slow_rec.duration_ms,
+        "fast tool duration ({}ms) should be < slow tool duration ({}ms)",
+        fast_rec.duration_ms,
+        slow_rec.duration_ms
+    );
+    assert!(
+        slow_rec.duration_ms >= 15,
+        "slow tool should report ~20ms, got {}ms",
+        slow_rec.duration_ms
+    );
 }

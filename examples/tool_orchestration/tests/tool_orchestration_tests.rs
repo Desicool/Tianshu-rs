@@ -444,7 +444,63 @@ async fn workflow_handles_multiple_tool_rounds() {
     assert_eq!(counter.load(Ordering::SeqCst), 2, "search called twice");
 }
 
-/// Test 5: Workflow registers correctly under the default code.
+/// Test 5: Synthesize fallback — when PlanTools saves an assistant message with
+/// empty content, SynthesizeStage falls back to an extra LLM synthesis call.
+#[tokio::test]
+async fn synthesize_falls_back_to_llm_when_no_assistant_message() {
+    // PlanTools will return tool_use, then "stop" with empty content.
+    // SynthesizeStage should detect the empty assistant message and call the LLM
+    // one more time for a synthesis response.
+    let counter = Arc::new(AtomicUsize::new(0));
+
+    let mut tools = ToolRegistry::new();
+    tools.register(MockTool::new(
+        "read_file",
+        ToolSafety::ConcurrentSafe,
+        "file_content",
+        Arc::clone(&counter),
+    ));
+    let tools = Arc::new(tools);
+
+    // Sequence: tool_use → stop with empty content → synthesis response
+    let llm = MockLlmProvider::new(vec![
+        tool_use_response(vec![("read_file", "rf_1")]),
+        // PlanTools gets "stop" with empty content; appends empty assistant msg
+        LlmResponse {
+            content: String::new(),
+            tool_calls: None,
+            usage: LlmUsage { prompt_tokens: 5, completion_tokens: 0 },
+            finish_reason: "stop".to_string(),
+        },
+        // SynthesizeStage fallback call
+        stop_response("Synthesized: file_content processed successfully."),
+    ]);
+    let llm_dyn: Arc<dyn LlmProvider> = llm;
+
+    let mut registry = WorkflowRegistry::new();
+    register_test_workflow(&mut registry, Arc::clone(&llm_dyn), Arc::clone(&tools));
+
+    let case = make_case("orch_synth_fallback", "Read a file");
+    let (cs, ss) = make_stores();
+    let mut env = SchedulerEnvironment::from_session_id("s_synth_fallback", vec![case]);
+    let mut sched = SchedulerV2::new();
+
+    tick_once(&mut sched, &mut env, &registry, cs, ss).await;
+
+    let final_case = &env.current_case_dict["orch_synth_fallback"];
+    assert_eq!(
+        final_case.execution_state,
+        ExecutionState::Finished,
+        "Workflow should be Finished"
+    );
+    assert_eq!(
+        final_case.finished_description.as_deref(),
+        Some("Synthesized: file_content processed successfully."),
+        "Should use the fallback synthesis response"
+    );
+}
+
+/// Test 6: Workflow registers correctly under the default code.
 #[tokio::test]
 async fn workflow_registers_correctly() {
     let llm = MockLlmProvider::new(vec![]);

@@ -66,9 +66,13 @@ impl StageBase<OrchStage> for ExecuteExclusiveStage {
                 .unwrap_or(ToolSafety::Exclusive);
 
             let result = if safety == ToolSafety::ConcurrentSafe {
-                safe_iter.next().expect("concurrent result missing")
+                safe_iter
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("concurrent result missing for '{}'", call.name))?
             } else {
-                excl_iter.next().expect("exclusive result missing")
+                excl_iter
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("exclusive result missing for '{}'", call.name))?
             };
             merged.push(result);
         }

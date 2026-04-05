@@ -10,6 +10,7 @@ members = [
     "examples/react_agent",
     "examples/tool_orchestration",
     "examples/multi_agent_swarm",
+    "examples/conversation_agent",
 ]
 resolver = "2"
 

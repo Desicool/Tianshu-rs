@@ -67,11 +67,15 @@ impl LlmProvider for ResilientLlmProvider {
         .await;
 
         // If the retry loop exhausted with ProviderOverloaded and we have
-        // untried fallbacks, give them a shot outside the loop
+        // untried fallbacks, give them a shot outside the loop.
+        // The retry loop already tried fallbacks[0..max_attempts-2] (one per attempt
+        // starting at attempt 1, via fallback_idx = attempt - 1). Skip those and
+        // only try fallbacks that were not yet attempted inside the loop.
         if let Err(ref e) = result {
             let class = (self.retry_policy.classify)(e);
             if class == ErrorClass::ProviderOverloaded {
-                for fb in &self.fallbacks {
+                let tried_in_loop = (self.retry_policy.max_attempts as usize).saturating_sub(1);
+                for fb in self.fallbacks.iter().skip(tried_in_loop) {
                     if let Ok(resp) = fb.complete(current_request.clone()).await {
                         return Ok(resp);
                     }

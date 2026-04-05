@@ -208,10 +208,10 @@ async fn execute_with_concurrency_readonly_run_in_parallel() {
     let elapsed = start.elapsed();
 
     assert_eq!(results.len(), 2);
-    assert_eq!(results[0].call_id, "c1");
-    assert_eq!(results[1].call_id, "c2");
-    assert!(!results[0].is_error);
-    assert!(!results[1].is_error);
+    assert_eq!(results[0].0.call_id, "c1");
+    assert_eq!(results[1].0.call_id, "c2");
+    assert!(!results[0].0.is_error);
+    assert!(!results[1].0.is_error);
 
     // Both ReadOnly tools should run in parallel, so total time < 2x single tool time
     assert!(
@@ -247,10 +247,10 @@ async fn execute_with_concurrency_exclusive_runs_alone() {
     let results = registry.execute_with_concurrency(&calls, 10).await;
 
     assert_eq!(results.len(), 2);
-    assert_eq!(results[0].call_id, "c1");
-    assert_eq!(results[0].content, "slow_a done");
-    assert_eq!(results[1].call_id, "c2");
-    assert_eq!(results[1].content, "exclusive done");
+    assert_eq!(results[0].0.call_id, "c1");
+    assert_eq!(results[0].0.content, "slow_a done");
+    assert_eq!(results[1].0.call_id, "c2");
+    assert_eq!(results[1].0.content, "exclusive done");
 }
 
 #[tokio::test]
@@ -266,4 +266,86 @@ async fn execute_call_unknown_tool_returns_error() {
     let result = registry.execute_call(&call).await;
     assert!(result.is_error);
     assert!(result.content.contains("nonexistent"));
+}
+
+// ── Per-tool timing tests (TDD for duration_ms fix) ──────────────────────────
+
+#[tokio::test]
+async fn execute_with_concurrency_returns_per_tool_duration() {
+    // Fast tool (~0ms) and slow tool (20ms) run concurrently.
+    // After the fix, each (ToolResult, duration_ms) pair should reflect that
+    // tool's own execution time — not the full batch wall time.
+    let mut registry = ToolRegistry::new();
+    registry.register(SlowReadOnlyTool {
+        name: "instant".into(),
+        delay_ms: 0,
+    });
+    registry.register(SlowReadOnlyTool {
+        name: "slow_20".into(),
+        delay_ms: 20,
+    });
+
+    let calls = vec![
+        ToolCall {
+            id: "fast".into(),
+            name: "instant".into(),
+            arguments: "{}".into(),
+        },
+        ToolCall {
+            id: "slow".into(),
+            name: "slow_20".into(),
+            arguments: "{}".into(),
+        },
+    ];
+
+    // execute_with_concurrency now returns Vec<(ToolResult, u64)>
+    let results: Vec<(workflow_engine::llm::ToolResult, u64)> =
+        registry.execute_with_concurrency(&calls, 10).await;
+
+    assert_eq!(results.len(), 2);
+    let (fast_result, fast_ms) = &results[0];
+    let (slow_result, slow_ms) = &results[1];
+
+    assert_eq!(fast_result.call_id, "fast");
+    assert_eq!(slow_result.call_id, "slow");
+    assert!(!fast_result.is_error);
+    assert!(!slow_result.is_error);
+
+    // The slow tool must report a longer duration than the fast tool.
+    // With batch-time stamping (the bug), both would be ~20ms and this fails.
+    assert!(
+        fast_ms < slow_ms,
+        "fast tool duration ({fast_ms}ms) should be less than slow tool duration ({slow_ms}ms)"
+    );
+    // Slow tool should be at least 15ms (allowing for timer jitter)
+    assert!(
+        *slow_ms >= 15,
+        "slow tool should report ~20ms duration, got {slow_ms}ms"
+    );
+}
+
+#[tokio::test]
+async fn execute_with_concurrency_exclusive_returns_duration() {
+    // Exclusive tools should also carry their individual duration.
+    let mut registry = ToolRegistry::new();
+    registry.register(SlowExclusiveTool);
+
+    let calls = vec![ToolCall {
+        id: "excl".into(),
+        name: "exclusive_slow".into(),
+        arguments: "{}".into(),
+    }];
+
+    let results: Vec<(workflow_engine::llm::ToolResult, u64)> =
+        registry.execute_with_concurrency(&calls, 10).await;
+
+    assert_eq!(results.len(), 1);
+    let (result, duration_ms) = &results[0];
+    assert_eq!(result.call_id, "excl");
+    assert!(!result.is_error);
+    // SlowExclusiveTool sleeps 50ms
+    assert!(
+        *duration_ms >= 40,
+        "exclusive tool should report ~50ms duration, got {duration_ms}ms"
+    );
 }

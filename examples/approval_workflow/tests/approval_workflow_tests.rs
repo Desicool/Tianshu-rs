@@ -40,6 +40,7 @@ async fn tick(
             cs as Arc<dyn workflow_engine::store::CaseStore>,
             ss as Arc<dyn workflow_engine::store::StateStore>,
             None,
+            None,
         )
         .await
         .unwrap();

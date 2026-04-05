@@ -3,7 +3,9 @@
 /// These tests verify construction, configuration, and the LlmProvider
 /// trait contract WITHOUT making real HTTP calls.
 use std::sync::Arc;
-use workflow_engine::llm::{LlmMessage, LlmProvider, LlmRequest, LlmTool, ToolCall, ToolResult};
+use workflow_engine::llm::{LlmMessage, LlmProvider, LlmRequest};
+#[cfg(feature = "test-utils")]
+use workflow_engine::llm::{LlmTool, ToolCall, ToolResult};
 use workflow_engine_llm_openai::OpenAiProvider;
 
 #[test]
@@ -66,8 +68,9 @@ fn llm_request_construction() {
     assert_eq!(req.messages.len(), 1);
 }
 
-// ── Tool serialization tests ──────────────────────────────────────────────────
+// ── Tool serialization tests (require test-utils feature) ────────────────────
 
+#[cfg(feature = "test-utils")]
 #[test]
 fn wire_request_includes_tools_when_some() {
     use serde_json::json;
@@ -105,6 +108,7 @@ fn wire_request_includes_tools_when_some() {
     );
 }
 
+#[cfg(feature = "test-utils")]
 #[test]
 fn wire_request_omits_tools_when_none() {
     let req = LlmRequest {
@@ -119,6 +123,7 @@ fn wire_request_omits_tools_when_none() {
     assert!(wire_json.get("tools").is_none());
 }
 
+#[cfg(feature = "test-utils")]
 #[test]
 fn tool_results_serialize_to_role_tool_messages() {
     use serde_json::json;
@@ -160,6 +165,7 @@ fn tool_results_serialize_to_role_tool_messages() {
     assert_eq!(messages[2]["content"], "15°C, cloudy");
 }
 
+#[cfg(feature = "test-utils")]
 #[test]
 fn multiple_tool_results_expand_to_multiple_role_tool_messages() {
     use serde_json::json;
@@ -213,6 +219,7 @@ fn multiple_tool_results_expand_to_multiple_role_tool_messages() {
     assert_eq!(messages[3]["tool_call_id"], "call_2");
 }
 
+#[cfg(feature = "test-utils")]
 #[test]
 fn assistant_tool_calls_serialized_in_wire_message() {
     use serde_json::json;

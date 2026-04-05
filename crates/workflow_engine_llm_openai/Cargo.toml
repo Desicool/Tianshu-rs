@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "OpenAI-compatible LlmProvider adapter for workflow-engine"
 
+[features]
+test-utils = []
+
 [dependencies]
 workflow_engine = { path = "../workflow_engine" }
 reqwest = { workspace = true }

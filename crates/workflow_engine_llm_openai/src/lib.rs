@@ -146,10 +146,17 @@ fn build_wire_messages(request: &LlmRequest) -> Vec<WireMessage> {
         if let Some(tool_results) = &msg.tool_results {
             // Expand each tool result into a separate role: "tool" message.
             for result in tool_results {
+                // OpenAI tool messages have no native error flag; prefix content with "ERROR: "
+                // so the model can see the failure reason.
+                let content = if result.is_error {
+                    format!("ERROR: {}", result.content)
+                } else {
+                    result.content.clone()
+                };
                 messages.push(WireMessage::Tool {
                     role: "tool".into(),
                     tool_call_id: result.tool_use_id.clone(),
-                    content: result.content.clone(),
+                    content,
                 });
             }
         } else if let Some(tool_calls) = &msg.tool_calls {
@@ -201,6 +208,7 @@ fn build_wire_request(request: &LlmRequest) -> WireRequest {
 ///
 /// Exposed publicly so that unit tests can inspect the wire format without
 /// making real HTTP calls.
+#[cfg(any(test, feature = "test-utils"))]
 pub fn build_wire_request_json(request: &LlmRequest) -> Value {
     serde_json::to_value(build_wire_request(request))
         .expect("WireRequest serialisation must not fail")
@@ -214,7 +222,10 @@ fn parse_tool_calls(wire_calls: Vec<WireToolCall>) -> Vec<ToolCall> {
             let func = wc.function?;
             let name = func.name?;
             let args_str = func.arguments.unwrap_or_else(|| "{}".into());
-            let input: Value = serde_json::from_str(&args_str).unwrap_or(Value::Null);
+            let input: Value = serde_json::from_str(&args_str).unwrap_or_else(|e| {
+                tracing::warn!("Failed to parse tool call arguments as JSON: {e}. Raw: {args_str}");
+                Value::Null
+            });
             Some(ToolCall { id, name, input })
         })
         .collect()
@@ -511,13 +522,82 @@ mod tests {
     }
 
     #[test]
-    fn content_is_empty_string_when_none_in_response() {
-        // Simulate the case where content is None (tool-only response)
-        let msg = WireChoiceMessage {
-            content: None,
-            tool_calls: None,
+    fn error_tool_result_prefixes_content_with_error() {
+        use serde_json::json;
+
+        let req = LlmRequest {
+            model: "gpt-4o".into(),
+            system_prompt: None,
+            messages: vec![
+                LlmMessage::user("run something"),
+                LlmMessage::assistant_with_tool_calls(
+                    "",
+                    vec![ToolCall {
+                        id: "c1".into(),
+                        name: "run_cmd".into(),
+                        input: json!({}),
+                    }],
+                ),
+                LlmMessage::tool_results(vec![ToolResult {
+                    tool_use_id: "c1".into(),
+                    content: "command not found".into(),
+                    is_error: true,
+                }]),
+            ],
+            temperature: None,
+            max_tokens: None,
+            tools: None,
         };
-        let content = msg.content.clone().unwrap_or_default();
-        assert_eq!(content, "");
+        let msgs = build_wire_messages(&req);
+        let v = serde_json::to_value(&msgs).unwrap();
+        let arr = v.as_array().unwrap();
+        // user + assistant + tool = 3
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[2]["role"], "tool");
+        assert_eq!(arr[2]["content"], "ERROR: command not found");
+    }
+
+    #[test]
+    fn non_error_tool_result_content_unchanged() {
+        use serde_json::json;
+
+        let req = LlmRequest {
+            model: "gpt-4o".into(),
+            system_prompt: None,
+            messages: vec![
+                LlmMessage::user("search"),
+                LlmMessage::assistant_with_tool_calls(
+                    "",
+                    vec![ToolCall {
+                        id: "c2".into(),
+                        name: "search".into(),
+                        input: json!({}),
+                    }],
+                ),
+                LlmMessage::tool_results(vec![ToolResult {
+                    tool_use_id: "c2".into(),
+                    content: "42 results".into(),
+                    is_error: false,
+                }]),
+            ],
+            temperature: None,
+            max_tokens: None,
+            tools: None,
+        };
+        let msgs = build_wire_messages(&req);
+        let v = serde_json::to_value(&msgs).unwrap();
+        let arr = v.as_array().unwrap();
+        assert_eq!(arr[2]["content"], "42 results");
+    }
+
+    #[test]
+    fn parse_tool_calls_returns_null_for_invalid_json_arguments() {
+        // Invalid JSON in arguments — should not panic, falls back to Null.
+        let raw = r#"[{"id":"call_bad","type":"function","function":{"name":"foo","arguments":"not-valid-json"}}]"#;
+        let wire_calls: Vec<WireToolCall> = serde_json::from_str(raw).unwrap();
+        let calls = parse_tool_calls(wire_calls);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id, "call_bad");
+        assert_eq!(calls[0].input, Value::Null);
     }
 }

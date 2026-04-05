@@ -49,14 +49,11 @@ fn llm_call() -> LlmCallRecord {
             messages: vec![LlmMessage {
                 role: "user".to_string(),
                 content: "hello".to_string(),
-
                 tool_calls: None,
-
                 tool_call_id: None,
             }],
             temperature: None,
             max_tokens: None,
-
             tools: None,
         },
         response_content: Some("hi".to_string()),

@@ -15,6 +15,7 @@ impl LlmProvider for EchoLlm {
             .unwrap_or_default();
         Ok(LlmResponse {
             content,
+            tool_calls: None,
             usage: LlmUsage {
                 prompt_tokens: 10,
                 completion_tokens: 5,
@@ -35,14 +36,11 @@ async fn llm_provider_echo_impl() {
         messages: vec![LlmMessage {
             role: "user".into(),
             content: "hello world".into(),
-
             tool_calls: None,
-
             tool_call_id: None,
         }],
         temperature: Some(0.0),
         max_tokens: Some(64),
-
         tools: None,
     };
 
@@ -61,14 +59,11 @@ async fn llm_request_with_system_prompt() {
         messages: vec![LlmMessage {
             role: "user".into(),
             content: "ping".into(),
-
             tool_calls: None,
-
             tool_call_id: None,
         }],
         temperature: None,
         max_tokens: None,
-
         tools: None,
     };
 

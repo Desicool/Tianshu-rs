@@ -5,20 +5,93 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::time::Duration;
 use tracing::{debug, info};
 
-use workflow_engine::llm::{LlmProvider, LlmRequest, LlmResponse, LlmUsage};
+use workflow_engine::llm::{LlmProvider, LlmRequest, LlmResponse, LlmTool, LlmUsage, ToolCall};
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 const REQUEST_TIMEOUT_SECS: u64 = 120;
 
 // ── Wire types (internal) ─────────────────────────────────────────────────────
 
+/// Wrapper for tool function definition sent to OpenAI.
 #[derive(Debug, Serialize)]
-struct WireMessage {
-    role: String,
-    content: String,
+struct WireToolFunction {
+    name: String,
+    description: String,
+    parameters: Value,
+}
+
+/// A tool entry in the OpenAI request.
+#[derive(Debug, Serialize)]
+struct WireTool {
+    #[serde(rename = "type")]
+    kind: String,
+    function: WireToolFunction,
+}
+
+impl WireTool {
+    fn from_llm_tool(tool: &LlmTool) -> Self {
+        WireTool {
+            kind: "function".into(),
+            function: WireToolFunction {
+                name: tool.name.clone(),
+                description: tool.description.clone(),
+                parameters: tool.input_schema.clone(),
+            },
+        }
+    }
+}
+
+/// Tool call function from the response.
+#[derive(Debug, Clone, Deserialize)]
+struct WireToolCallFunction {
+    name: Option<String>,
+    arguments: Option<String>,
+}
+
+/// A tool_call entry in the OpenAI response choice message.
+#[derive(Debug, Clone, Deserialize)]
+struct WireToolCall {
+    id: Option<String>,
+    function: Option<WireToolCallFunction>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(untagged)]
+enum WireMessage {
+    /// Regular user / system / assistant (text-only) message.
+    Plain { role: String, content: String },
+    /// Assistant message that carries tool calls.
+    AssistantWithTools {
+        role: String,
+        content: String,
+        tool_calls: Vec<WireAssistantToolCall>,
+    },
+    /// Tool result message.
+    Tool {
+        role: String,
+        tool_call_id: String,
+        content: String,
+    },
+}
+
+/// Tool call entry serialised inside an assistant message.
+#[derive(Debug, Serialize)]
+struct WireAssistantToolCall {
+    id: String,
+    #[serde(rename = "type")]
+    kind: String,
+    function: WireAssistantToolCallFunction,
+}
+
+#[derive(Debug, Serialize)]
+struct WireAssistantToolCallFunction {
+    name: String,
+    /// OpenAI expects a JSON *string*, not an object.
+    arguments: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -29,6 +102,8 @@ struct WireRequest {
     temperature: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tools: Option<Vec<WireTool>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -40,6 +115,7 @@ struct WireChoice {
 #[derive(Debug, Deserialize)]
 struct WireChoiceMessage {
     content: Option<String>,
+    tool_calls: Option<Vec<WireToolCall>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -52,6 +128,104 @@ struct WireUsage {
 struct WireResponse {
     choices: Option<Vec<WireChoice>>,
     usage: Option<WireUsage>,
+}
+
+// ── Wire-request builder (also exposed for tests) ─────────────────────────────
+
+fn build_wire_messages(request: &LlmRequest) -> Vec<WireMessage> {
+    let mut messages: Vec<WireMessage> = Vec::new();
+
+    if let Some(sys) = &request.system_prompt {
+        messages.push(WireMessage::Plain {
+            role: "system".into(),
+            content: sys.clone(),
+        });
+    }
+
+    for msg in &request.messages {
+        if let Some(tool_results) = &msg.tool_results {
+            // Expand each tool result into a separate role: "tool" message.
+            for result in tool_results {
+                messages.push(WireMessage::Tool {
+                    role: "tool".into(),
+                    tool_call_id: result.tool_use_id.clone(),
+                    content: result.content.clone(),
+                });
+            }
+        } else if let Some(tool_calls) = &msg.tool_calls {
+            // Assistant message with tool calls.
+            let wire_calls: Vec<WireAssistantToolCall> = tool_calls
+                .iter()
+                .map(|tc| WireAssistantToolCall {
+                    id: tc.id.clone(),
+                    kind: "function".into(),
+                    function: WireAssistantToolCallFunction {
+                        name: tc.name.clone(),
+                        arguments: tc.input.to_string(),
+                    },
+                })
+                .collect();
+            messages.push(WireMessage::AssistantWithTools {
+                role: msg.role.clone(),
+                content: msg.content.clone(),
+                tool_calls: wire_calls,
+            });
+        } else {
+            messages.push(WireMessage::Plain {
+                role: msg.role.clone(),
+                content: msg.content.clone(),
+            });
+        }
+    }
+
+    messages
+}
+
+fn build_wire_request(request: &LlmRequest) -> WireRequest {
+    let messages = build_wire_messages(request);
+    let tools = request
+        .tools
+        .as_ref()
+        .map(|ts| ts.iter().map(WireTool::from_llm_tool).collect::<Vec<_>>());
+
+    WireRequest {
+        model: request.model.clone(),
+        messages,
+        temperature: request.temperature,
+        max_tokens: request.max_tokens,
+        tools,
+    }
+}
+
+/// Build the JSON that would be sent to the OpenAI API for a given request.
+///
+/// Exposed publicly so that unit tests can inspect the wire format without
+/// making real HTTP calls.
+pub fn build_wire_request_json(request: &LlmRequest) -> Value {
+    serde_json::to_value(build_wire_request(request))
+        .expect("WireRequest serialisation must not fail")
+}
+
+fn parse_tool_calls(wire_calls: Vec<WireToolCall>) -> Vec<ToolCall> {
+    wire_calls
+        .into_iter()
+        .filter_map(|wc| {
+            let id = wc.id?;
+            let func = wc.function?;
+            let name = func.name?;
+            let args_str = func.arguments.unwrap_or_else(|| "{}".into());
+            let input: Value = serde_json::from_str(&args_str).unwrap_or(Value::Null);
+            Some(ToolCall { id, name, input })
+        })
+        .collect()
+}
+
+fn normalize_finish_reason(raw: &str) -> String {
+    if raw == "tool_calls" {
+        "tool_use".into()
+    } else {
+        raw.into()
+    }
 }
 
 // ── Builder ───────────────────────────────────────────────────────────────────
@@ -156,29 +330,7 @@ impl OpenAiProvider {
 impl LlmProvider for OpenAiProvider {
     async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
         let url = format!("{}/chat/completions", self.base_url);
-
-        let mut messages: Vec<WireMessage> = Vec::new();
-
-        if let Some(sys) = &request.system_prompt {
-            messages.push(WireMessage {
-                role: "system".into(),
-                content: sys.clone(),
-            });
-        }
-
-        for msg in &request.messages {
-            messages.push(WireMessage {
-                role: msg.role.clone(),
-                content: msg.content.clone(),
-            });
-        }
-
-        let body = WireRequest {
-            model: request.model.clone(),
-            messages,
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-        };
+        let body = build_wire_request(&request);
 
         debug!(
             "OpenAI request: model={}, url={}, msgs={}",
@@ -209,16 +361,20 @@ impl LlmProvider for OpenAiProvider {
             return Err(anyhow!("LLM API returned empty choices"));
         }
 
-        let content = choices[0]
-            .message
-            .content
-            .clone()
-            .ok_or_else(|| anyhow!("LLM returned None content"))?;
+        let choice = &choices[0];
 
-        let finish_reason = choices[0]
-            .finish_reason
+        // Content may be null when the model only returns tool calls.
+        let content = choice.message.content.clone().unwrap_or_default();
+
+        let tool_calls = choice
+            .message
+            .tool_calls
             .clone()
-            .unwrap_or_else(|| "stop".into());
+            .map(parse_tool_calls)
+            .filter(|v: &Vec<ToolCall>| !v.is_empty());
+
+        let finish_reason =
+            normalize_finish_reason(choice.finish_reason.as_deref().unwrap_or("stop"));
 
         let usage = match wire.usage {
             Some(u) => LlmUsage {
@@ -238,9 +394,130 @@ impl LlmProvider for OpenAiProvider {
 
         Ok(LlmResponse {
             content,
+            tool_calls,
             usage,
             finish_reason,
             tool_calls: None,
         })
+    }
+}
+
+// ── Unit tests ────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use workflow_engine::llm::{LlmMessage, LlmTool, ToolCall, ToolResult};
+
+    #[test]
+    fn normalize_finish_reason_maps_tool_calls_to_tool_use() {
+        assert_eq!(normalize_finish_reason("tool_calls"), "tool_use");
+    }
+
+    #[test]
+    fn normalize_finish_reason_leaves_stop_unchanged() {
+        assert_eq!(normalize_finish_reason("stop"), "stop");
+    }
+
+    #[test]
+    fn normalize_finish_reason_leaves_end_turn_unchanged() {
+        assert_eq!(normalize_finish_reason("end_turn"), "end_turn");
+    }
+
+    #[test]
+    fn wire_request_includes_tools_field() {
+        use serde_json::json;
+
+        let tool = LlmTool {
+            name: "search".into(),
+            description: "Search the internet".into(),
+            input_schema: json!({ "type": "object" }),
+        };
+        let req = LlmRequest {
+            model: "gpt-4o".into(),
+            system_prompt: None,
+            messages: vec![LlmMessage::user("hello")],
+            temperature: None,
+            max_tokens: None,
+            tools: Some(vec![tool]),
+        };
+        let wire = build_wire_request(&req);
+        let v = serde_json::to_value(&wire).unwrap();
+        assert!(v["tools"].is_array());
+        assert_eq!(v["tools"][0]["type"], "function");
+        assert_eq!(v["tools"][0]["function"]["name"], "search");
+    }
+
+    #[test]
+    fn wire_request_omits_tools_when_none() {
+        let req = LlmRequest {
+            model: "gpt-4o".into(),
+            system_prompt: None,
+            messages: vec![LlmMessage::user("hello")],
+            temperature: None,
+            max_tokens: None,
+            tools: None,
+        };
+        let wire = build_wire_request(&req);
+        let v = serde_json::to_value(&wire).unwrap();
+        assert!(v.get("tools").is_none());
+    }
+
+    #[test]
+    fn tool_results_expand_to_role_tool_messages() {
+        use serde_json::json;
+
+        let req = LlmRequest {
+            model: "gpt-4o".into(),
+            system_prompt: None,
+            messages: vec![
+                LlmMessage::user("What's the weather?"),
+                LlmMessage::assistant_with_tool_calls(
+                    "",
+                    vec![ToolCall {
+                        id: "c1".into(),
+                        name: "weather".into(),
+                        input: json!({"city": "Berlin"}),
+                    }],
+                ),
+                LlmMessage::tool_results(vec![ToolResult {
+                    tool_use_id: "c1".into(),
+                    content: "Rainy".into(),
+                    is_error: false,
+                }]),
+            ],
+            temperature: None,
+            max_tokens: None,
+            tools: None,
+        };
+        let msgs = build_wire_messages(&req);
+        let v = serde_json::to_value(&msgs).unwrap();
+        let arr = v.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        assert_eq!(arr[2]["role"], "tool");
+        assert_eq!(arr[2]["tool_call_id"], "c1");
+        assert_eq!(arr[2]["content"], "Rainy");
+    }
+
+    #[test]
+    fn parse_tool_calls_deserialises_arguments_string() {
+        let raw = r#"[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{\"city\":\"London\"}"}}]"#;
+        let wire_calls: Vec<WireToolCall> = serde_json::from_str(raw).unwrap();
+        let calls = parse_tool_calls(wire_calls);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id, "call_1");
+        assert_eq!(calls[0].name, "get_weather");
+        assert_eq!(calls[0].input["city"], "London");
+    }
+
+    #[test]
+    fn content_is_empty_string_when_none_in_response() {
+        // Simulate the case where content is None (tool-only response)
+        let msg = WireChoiceMessage {
+            content: None,
+            tool_calls: None,
+        };
+        let content = msg.content.clone().unwrap_or_default();
+        assert_eq!(content, "");
     }
 }

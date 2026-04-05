@@ -63,6 +63,11 @@ LangGraph is an excellent tool. Tianshu solves a different problem: you want **t
 | **LLM integration** | Via LangChain (Python ecosystem) | Via `LlmProvider` trait — any API, any vendor |
 | **Concurrency** | Python asyncio | Rust Tokio — native async/await, no GIL |
 | **Observability** | LangSmith (commercial platform) | Structured logging via `tracing` (see [Observability](#observability)) |
+| **Tool orchestration** | ToolNode / custom | `Tool` trait + `ToolRegistry` — read/write concurrency |
+| **Streaming LLM** | Via LangChain streaming | First-class `StreamingLlmProvider` trait |
+| **Error recovery** | Custom retry logic | `RetryPolicy` + `ResilientLlmProvider` with fallbacks |
+| **Sub-workflow spawning** | Subgraphs | `ctx.spawn_child()` — checkpoint-safe, zero resources while waiting |
+| **Context management** | Custom | `ManagedConversation` — auto-compacts at configurable threshold |
 | **License** | MIT | MIT |
 
 ### Code comparison
@@ -172,6 +177,113 @@ let llm = OpenAiProvider::builder("your-key", "doubao-seed-2-0-pro-260215")
     .base_url("https://ark.cn-beijing.volces.com/api/v3")
     .build();
 ```
+
+### 6. Tool orchestration with concurrency-safe execution
+
+Define tools with the `Tool` trait and register them in a `ToolRegistry`. Call `ctx.tool_step()` to run a full LLM-driven tool-use loop — the engine calls the model, executes tool calls, and feeds results back until the model returns plain text:
+
+```rust
+struct SearchTool;
+
+#[async_trait]
+impl Tool for SearchTool {
+    fn name(&self) -> &str { "web_search" }
+    fn description(&self) -> &str { "Search the web for information" }
+    fn safety(&self) -> ToolSafety { ToolSafety::ReadOnly }  // runs concurrently with other ReadOnly tools
+    fn parameters_schema(&self) -> JsonValue {
+        serde_json::json!({ "type": "object", "properties": { "query": { "type": "string" } } })
+    }
+    async fn execute(&self, input: JsonValue) -> Result<String> {
+        web_search(input["query"].as_str().unwrap_or("")).await
+    }
+}
+
+let mut tools = ToolRegistry::new();
+tools.register(SearchTool);
+
+let result = ctx.tool_step("research", &llm, &tools, request, &ToolLoopConfig::default()).await?;
+```
+
+`ReadOnly` tools run in parallel; `Exclusive` tools run alone. The engine partitions each round of tool calls automatically.
+
+### 7. Error recovery and resilient providers
+
+Wrap any `LlmProvider` with retry and fallback logic:
+
+```rust
+let policy = RetryPolicy {
+    max_attempts: 3,
+    base_delay: Duration::from_secs(1),
+    backoff_factor: 2.0,
+    ..Default::default()
+};
+
+let llm = ResilientLlmProvider::new(
+    Arc::new(OpenAiProvider::new("key", "gpt-4o")),
+    policy,
+).with_fallback(Arc::new(OpenAiProvider::new("key", "gpt-3.5-turbo")));
+```
+
+Errors are classified automatically: `Transient` retries with backoff, `ProviderOverloaded` tries a fallback provider, `Fatal` stops immediately. Use `ctx.step_with_retry()` to apply retry logic at the step level:
+
+```rust
+let result = ctx.step_with_retry("call_llm", &policy, |_| async {
+    llm.complete(request.clone()).await
+}).await?;
+```
+
+### 8. Streaming LLM responses
+
+Implement `StreamingLlmProvider` to deliver `LlmStreamEvent` values as they arrive. The `OpenAiProvider` already implements it out of the box:
+
+```rust
+let (tx, mut rx) = tokio::sync::mpsc::channel(64);
+llm.stream(request, tx).await?;
+
+while let Some(event) = rx.recv().await {
+    match event {
+        LlmStreamEvent::TextDelta(s) => print!("{}", s),
+        LlmStreamEvent::ToolUse(call) => handle_tool(call).await?,
+        LlmStreamEvent::Done(_) => break,
+        LlmStreamEvent::Error(e) => return Err(anyhow::anyhow!(e)),
+        _ => {}
+    }
+}
+```
+
+### 9. Sub-workflow spawning
+
+A workflow can spawn child workflows and wait for them — with full checkpoint safety. The parent suspends as `Waiting`, freeing all threads and connections until all children finish:
+
+```rust
+let handles = ctx.spawn_children(
+    &case_store,
+    vec![
+        SpawnConfig { workflow_code: "analyze".into(), resource_data: Some(chunk_a), ..Default::default() },
+        SpawnConfig { workflow_code: "analyze".into(), resource_data: Some(chunk_b), ..Default::default() },
+    ],
+).await?;
+
+// Parent suspends here — no thread held — resumes when all children are done
+let result = ctx.await_children(&handles, &case_store).await?;
+```
+
+### 10. Token-aware context compaction
+
+`ManagedConversation` tracks token usage and automatically compacts conversation history before hitting context limits:
+
+```rust
+let mut conv = ManagedConversation::new(
+    ContextConfig::default(),           // 128k input tokens, compact at 85% threshold
+    Arc::new(CharTokenCounter),
+    TruncationCompaction { preserve_recent: 10 },
+);
+
+conv.push(user_msg).await?;           // auto-compacts if approaching the limit
+ctx.set_managed_conversation(conv);   // attach to workflow context
+```
+
+Use `LlmSummaryCompaction` to summarise dropped messages with an LLM call instead of truncating them.
 
 ---
 
@@ -316,6 +428,14 @@ These are good first contributions. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Roadmap
 
+**Recently implemented:**
+- [x] Tool orchestration — `Tool` trait, `ToolRegistry`, `ctx.tool_step()`
+- [x] Error recovery — `RetryPolicy`, `ResilientLlmProvider`, `ctx.step_with_retry()`
+- [x] Streaming LLM — `StreamingLlmProvider`, `LlmStreamEvent`, OpenAI SSE streaming
+- [x] Sub-workflow spawning — `ctx.spawn_child()`, `ctx.await_children()`
+- [x] Context management — `ManagedConversation`, `TruncationCompaction`, `LlmSummaryCompaction`
+
+**Up next:**
 - [ ] OpenTelemetry integration (trace context propagation)
 - [ ] Step-level timing spans
 - [ ] `workflow_engine_sqlite` — SQLite adapter for lightweight deployments

@@ -1,3 +1,6 @@
+pub mod sse;
+pub mod streaming;
+
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -137,6 +140,16 @@ impl OpenAiProvider {
     pub fn model(&self) -> &str {
         &self.model
     }
+
+    /// The API key (used by submodules).
+    pub(crate) fn api_key(&self) -> &str {
+        &self.api_key
+    }
+
+    /// The reqwest client (used by submodules).
+    pub(crate) fn client(&self) -> &Client {
+        &self.client
+    }
 }
 
 #[async_trait]
@@ -227,6 +240,7 @@ impl LlmProvider for OpenAiProvider {
             content,
             usage,
             finish_reason,
+            tool_calls: None,
         })
     }
 }

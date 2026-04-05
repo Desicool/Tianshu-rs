@@ -29,7 +29,10 @@ impl PostgresCaseStore {
             finished_type: row.get("finished_type"),
             finished_description: row.get("finished_description"),
             parent_key: row.get("parent_key"),
-            child_key: row.get("child_key"),
+            child_keys: row
+                .get::<_, Option<serde_json::Value>>("child_keys")
+                .and_then(|v| serde_json::from_value(v).ok())
+                .unwrap_or_default(),
             lifecycle_state: row.get("lifecycle_state"),
             processing_report: row
                 .get::<_, Option<serde_json::Value>>("processing_report")
@@ -58,7 +61,7 @@ impl CaseStore for PostgresCaseStore {
                 INSERT INTO wf_cases (
                     case_key, session_id, workflow_code,
                     execution_state, finished_type, finished_description,
-                    parent_key, child_key, lifecycle_state,
+                    parent_key, child_keys, lifecycle_state,
                     processing_report, resource_data, private_vars,
                     created_at, updated_at
                 )
@@ -70,7 +73,7 @@ impl CaseStore for PostgresCaseStore {
                     finished_type      = EXCLUDED.finished_type,
                     finished_description = EXCLUDED.finished_description,
                     parent_key         = EXCLUDED.parent_key,
-                    child_key          = EXCLUDED.child_key,
+                    child_keys         = EXCLUDED.child_keys,
                     lifecycle_state    = EXCLUDED.lifecycle_state,
                     processing_report  = EXCLUDED.processing_report,
                     resource_data      = EXCLUDED.resource_data,
@@ -85,7 +88,7 @@ impl CaseStore for PostgresCaseStore {
                     &case.finished_type,
                     &case.finished_description,
                     &case.parent_key,
-                    &case.child_key,
+                    &serde_json::to_value(&case.child_keys)?,
                     &case.lifecycle_state,
                     &serde_json::to_value(&case.processing_report)?,
                     &case.resource_data,
@@ -140,7 +143,7 @@ impl CaseStore for PostgresCaseStore {
                     finished_type       TEXT,
                     finished_description TEXT,
                     parent_key          TEXT,
-                    child_key           TEXT,
+                    child_keys          JSONB NOT NULL DEFAULT '[]'::jsonb,
                     lifecycle_state     TEXT NOT NULL DEFAULT 'normal',
                     processing_report   JSONB NOT NULL DEFAULT '[]'::jsonb,
                     resource_data       JSONB,

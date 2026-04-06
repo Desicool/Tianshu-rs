@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Tests for the OpenAI streaming adapter.
 ///
 /// We test the SSE parsing logic in isolation, which is the core logic

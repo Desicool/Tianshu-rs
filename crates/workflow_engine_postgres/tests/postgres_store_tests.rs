@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// PostgreSQL store integration tests.
 ///
 /// These tests require a live PostgreSQL instance and are gated with `#[ignore]`.

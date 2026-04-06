@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use workflow_engine::session::Session;
 use workflow_engine::store::{InMemorySessionStore, SessionStore};
 

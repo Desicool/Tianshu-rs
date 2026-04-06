@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};

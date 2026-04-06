@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Integration tests for WorkflowContext cleanup behaviour.
 ///
 /// These tests verify that:

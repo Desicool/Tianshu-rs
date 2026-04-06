@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use async_trait::async_trait;
 /// Tests for LlmProvider trait and LlmRequest/LlmResponse types.
 use workflow_engine::llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage};

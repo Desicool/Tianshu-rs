@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Tests for CaseStore, StateStore traits and their InMemory implementations.
 /// These run without any database — pure in-memory validation.
 use workflow_engine::{

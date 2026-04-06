@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use std::sync::Arc;
 use workflow_engine::compact::{ManagedConversation, TruncationCompaction};
 use workflow_engine::llm::LlmMessage;

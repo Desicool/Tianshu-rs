@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Tests for OpenAI-compatible LlmProvider adapter.
 ///
 /// These tests verify construction, configuration, and the LlmProvider

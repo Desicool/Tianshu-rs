@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Server-Sent Events (SSE) parser for OpenAI streaming completions.
 use serde::Deserialize;
 use serde_json::Value as JsonValue;

@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 //! Observer implementations for the Tianshu workflow engine.
 //!
 //! This crate provides ready-made `Observer` implementations and dataset

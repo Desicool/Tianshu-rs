@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Observer integration tests for WorkflowContext and SchedulerV2.
 ///
 /// TDD: these tests were written before the implementation. They describe

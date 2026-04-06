@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use async_trait::async_trait;
 use std::sync::RwLock;
 use workflow_engine::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};

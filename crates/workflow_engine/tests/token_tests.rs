@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::sync::Arc;
-use workflow_engine::compact::{ManagedConversation, TruncationCompaction};
-use workflow_engine::llm::LlmMessage;
-use workflow_engine::token::{CharTokenCounter, ContextConfig, TokenCounter};
+use tianshu::compact::{ManagedConversation, TruncationCompaction};
+use tianshu::llm::LlmMessage;
+use tianshu::token::{CharTokenCounter, ContextConfig, TokenCounter};
 
 fn msg(role: &str, content: &str) -> LlmMessage {
     LlmMessage {
@@ -124,7 +124,7 @@ async fn managed_conversation_compact_if_needed_triggers() {
 
 #[tokio::test]
 async fn truncation_compaction_preserves_recent() {
-    use workflow_engine::compact::CompactionStrategy;
+    use tianshu::compact::CompactionStrategy;
 
     let strategy = TruncationCompaction { preserve_recent: 2 };
     let counter = CharTokenCounter;
@@ -144,7 +144,7 @@ async fn truncation_compaction_preserves_recent() {
 
 #[tokio::test]
 async fn truncation_compaction_removes_oldest() {
-    use workflow_engine::compact::CompactionStrategy;
+    use tianshu::compact::CompactionStrategy;
 
     let strategy = TruncationCompaction { preserve_recent: 1 };
     let counter = CharTokenCounter;

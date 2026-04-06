@@ -11,7 +11,7 @@
 ///
 /// All tests use InMemoryStateStore / InMemoryCaseStore — no database required.
 use std::sync::Arc;
-use workflow_engine::{
+use tianshu::{
     case::{Case, ExecutionState},
     store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateStore},
     WorkflowContext,

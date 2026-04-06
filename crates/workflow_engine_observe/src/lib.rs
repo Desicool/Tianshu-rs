@@ -21,7 +21,7 @@
 //! input/output pairs from collected records:
 //!
 //! ```rust,ignore
-//! use workflow_engine_observe::{InMemoryObserver, dataset::step_dataset};
+//! use tianshu_observe::{InMemoryObserver, dataset::step_dataset};
 //!
 //! let obs = Arc::new(InMemoryObserver::new());
 //! scheduler.set_observer(obs.clone());

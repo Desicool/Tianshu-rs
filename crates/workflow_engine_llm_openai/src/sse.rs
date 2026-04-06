@@ -6,7 +6,7 @@
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 
-use workflow_engine::llm::{LlmStreamEvent, LlmUsage, ToolCall};
+use tianshu::llm::{LlmStreamEvent, LlmUsage, ToolCall};
 
 /// A parsed SSE chunk from the streaming response.
 #[derive(Debug)]

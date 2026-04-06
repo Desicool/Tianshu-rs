@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 /// Tests for LlmProvider trait and LlmRequest/LlmResponse types.
-use workflow_engine::llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage};
+use tianshu::llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage};
 
 struct EchoLlm;
 

@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use std::sync::RwLock;
-use workflow_engine::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};
+use tianshu::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};
 
 /// In-memory observer that accumulates all records for programmatic access.
 ///

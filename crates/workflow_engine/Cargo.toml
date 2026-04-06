@@ -1,12 +1,12 @@
 [package]
-name = "workflow_engine"
+name = "tianshu"
 version = "0.1.0"
 edition = "2021"
 description = "Async Rust workflow engine — define workflows as trait implementations and run them on a pluggable scheduler"
 license = "Apache-2.0"
 repository = "https://github.com/Desicool/Tianshu-rs"
 homepage = "https://github.com/Desicool/Tianshu-rs"
-documentation = "https://docs.rs/workflow_engine"
+documentation = "https://docs.rs/tianshu"
 keywords = ["workflow", "async", "llm", "orchestration", "scheduler"]
 categories = ["asynchronous", "concurrency"]
 readme = "../../README.md"

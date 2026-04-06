@@ -6,11 +6,11 @@ use chrono::Utc;
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tempfile::NamedTempFile;
-use workflow_engine::{
+use tianshu::{
     observe::{LlmCallRecord, StepRecord, WorkflowRecord},
     LlmMessage, LlmRequest, LlmUsage, Observer,
 };
-use workflow_engine_observe::JsonlObserver;
+use tianshu_observe::JsonlObserver;
 
 fn step() -> StepRecord {
     StepRecord {

@@ -9,7 +9,7 @@ use futures::StreamExt;
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use workflow_engine::llm::{LlmRequest, LlmStreamEvent, LlmUsage, StreamingLlmProvider, ToolCall};
+use tianshu::llm::{LlmRequest, LlmStreamEvent, LlmUsage, StreamingLlmProvider, ToolCall};
 
 use crate::sse::{parse_sse_chunk, SseChunk};
 use crate::OpenAiProvider;

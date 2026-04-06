@@ -10,7 +10,7 @@ use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use serde_json::json;
-use workflow_engine::{
+use tianshu::{
     BaseWorkflow, Case, InMemoryCaseStore, InMemoryStateStore, Observer, SchedulerEnvironment,
     SchedulerV2, StepRecord, WorkflowContext, WorkflowRecord, WorkflowRegistry, WorkflowResult,
 };
@@ -289,7 +289,7 @@ async fn scheduler_injects_observer_into_contexts() {
 
 #[tokio::test]
 async fn scheduler_without_observer_still_works() {
-    use workflow_engine::{SchedulerEnvironment, WorkflowRegistry};
+    use tianshu::{SchedulerEnvironment, WorkflowRegistry};
 
     let mut scheduler = SchedulerV2::new();
     let case = Case::new("case_no_obs".into(), "sess".into(), "finish_wf".into());

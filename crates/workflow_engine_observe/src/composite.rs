@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 use std::sync::Arc;
-use workflow_engine::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};
+use tianshu::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};
 
 /// An observer that fans out every event to a list of child observers.
 ///

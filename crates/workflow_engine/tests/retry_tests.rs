@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use workflow_engine::llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage};
-use workflow_engine::retry::{with_retry, ErrorClass, RetryPolicy};
-use workflow_engine::ResilientLlmProvider;
+use tianshu::llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage};
+use tianshu::retry::{with_retry, ErrorClass, RetryPolicy};
+use tianshu::ResilientLlmProvider;
 
 // ── Retry core tests ─────────────────────────────────────────────────────────
 
@@ -299,9 +299,9 @@ fn overloaded_policy(max_attempts: u32) -> RetryPolicy {
         backoff_factor: 1.0,
         classify: Arc::new(|e| {
             if e.to_string().contains("overloaded") {
-                workflow_engine::retry::ErrorClass::ProviderOverloaded
+                tianshu::retry::ErrorClass::ProviderOverloaded
             } else {
-                workflow_engine::retry::ErrorClass::Fatal
+                tianshu::retry::ErrorClass::Fatal
             }
         }),
     }

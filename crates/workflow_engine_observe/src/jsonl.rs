@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use serde_json::{json, Value as JsonValue};
 use std::sync::Arc;
 use tokio::{fs::OpenOptions, io::AsyncWriteExt, sync::mpsc, sync::Notify};
-use workflow_engine::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};
+use tianshu::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};
 
 enum Event {
     Record(String),

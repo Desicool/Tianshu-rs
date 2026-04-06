@@ -5,10 +5,10 @@
 use std::sync::Arc;
 
 use serde_json::json;
-use workflow_engine::case::{Case, ExecutionState};
-use workflow_engine::context::WorkflowContext;
-use workflow_engine::spawn::{ChildrenResult, SpawnConfig};
-use workflow_engine::store::{CaseStore, InMemoryCaseStore, InMemoryStateStore};
+use tianshu::case::{Case, ExecutionState};
+use tianshu::context::WorkflowContext;
+use tianshu::spawn::{ChildrenResult, SpawnConfig};
+use tianshu::store::{CaseStore, InMemoryCaseStore, InMemoryStateStore};
 
 fn make_ctx(case_key: &str) -> (WorkflowContext, Arc<InMemoryCaseStore>) {
     let case = Case::new(case_key.into(), "sess_1".into(), "parent_wf".into());
@@ -92,7 +92,7 @@ async fn child_status_running() {
     let handle = ctx.spawn_child(config).await.unwrap();
     let status = ctx.child_status(&handle).await.unwrap();
     assert!(
-        matches!(status, workflow_engine::spawn::ChildStatus::Running),
+        matches!(status, tianshu::spawn::ChildStatus::Running),
         "newly spawned child should be Running"
     );
 }
@@ -121,7 +121,7 @@ async fn child_status_finished() {
 
     let status = ctx.child_status(&handle).await.unwrap();
     match status {
-        workflow_engine::spawn::ChildStatus::Finished {
+        tianshu::spawn::ChildStatus::Finished {
             finished_type,
             finished_description,
             resource_data,
@@ -194,7 +194,7 @@ async fn await_children_all_done_when_finished() {
             for (_, status) in &items {
                 assert!(matches!(
                     status,
-                    workflow_engine::spawn::ChildStatus::Finished { .. }
+                    tianshu::spawn::ChildStatus::Finished { .. }
                 ));
             }
         }

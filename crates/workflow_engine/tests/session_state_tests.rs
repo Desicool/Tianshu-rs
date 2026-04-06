@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-use workflow_engine::store::{InMemoryStateStore, StateStore};
+use tianshu::store::{InMemoryStateStore, StateStore};
 
 #[tokio::test]
 async fn session_state_save_and_get() {

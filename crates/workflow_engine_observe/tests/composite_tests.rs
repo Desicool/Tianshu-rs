@@ -5,11 +5,11 @@
 use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
-use workflow_engine::{
+use tianshu::{
     observe::{LlmCallRecord, StepRecord, WorkflowRecord},
     LlmMessage, LlmRequest, LlmUsage, Observer,
 };
-use workflow_engine_observe::{CompositeObserver, InMemoryObserver};
+use tianshu_observe::{CompositeObserver, InMemoryObserver};
 
 fn step(case_key: &str) -> StepRecord {
     StepRecord {

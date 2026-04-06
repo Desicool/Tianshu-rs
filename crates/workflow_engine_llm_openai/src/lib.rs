@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tracing::{debug, info};
 
-use workflow_engine::llm::{LlmProvider, LlmRequest, LlmResponse, LlmUsage};
+use tianshu::llm::{LlmProvider, LlmRequest, LlmResponse, LlmUsage};
 
 const DEFAULT_BASE_URL: &str = "https://api.openai.com/v1";
 const REQUEST_TIMEOUT_SECS: u64 = 120;

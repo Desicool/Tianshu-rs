@@ -87,9 +87,7 @@ async fn main() -> Result<()> {
                 .map(|w| w[1].clone())
                 .expect("--postgres requires a DATABASE_URL argument");
             let pool = tianshu_postgres::build_pool(&db_url)?;
-            let cs = Arc::new(tianshu_postgres::PostgresCaseStore::new(
-                pool.clone(),
-            ));
+            let cs = Arc::new(tianshu_postgres::PostgresCaseStore::new(pool.clone()));
             let ss = Arc::new(tianshu_postgres::PostgresStateStore::new(pool));
             cs.setup().await?;
             ss.setup().await?;

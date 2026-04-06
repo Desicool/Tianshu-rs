@@ -6,8 +6,8 @@ use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::{json, Value as JsonValue};
 use std::sync::Arc;
-use tokio::{fs::OpenOptions, io::AsyncWriteExt, sync::mpsc, sync::Notify};
 use tianshu::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};
+use tokio::{fs::OpenOptions, io::AsyncWriteExt, sync::mpsc, sync::Notify};
 
 enum Event {
     Record(String),

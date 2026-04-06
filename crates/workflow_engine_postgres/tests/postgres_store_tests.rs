@@ -20,8 +20,7 @@ use tianshu_postgres::{PostgresCaseStore, PostgresStateStore};
 async fn make_stores() -> (Arc<PostgresCaseStore>, Arc<PostgresStateStore>) {
     let db_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set to run postgres integration tests");
-    let pool =
-        tianshu_postgres::build_pool(&db_url).expect("failed to build connection pool");
+    let pool = tianshu_postgres::build_pool(&db_url).expect("failed to build connection pool");
 
     let case_store = Arc::new(PostgresCaseStore::new(pool.clone()));
     let state_store = Arc::new(PostgresStateStore::new(pool));

@@ -82,3 +82,38 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+## Development Pipeline
+
+All feature work, examples, and testing go through dedicated agents. **Do not implement, write examples, or run tests directly** — delegate to the appropriate agent.
+
+```
+Feature request  →  planner  →  feature-implementer  →  example-writer
+                                                      ↓
+                                                 test-runner (any time)
+```
+
+| Task | Agent to invoke |
+|------|----------------|
+| Design a new feature or API change | `planner` |
+| Implement an approved spec in `crates/` | `feature-implementer` |
+| Write or fix examples in `examples/` | `example-writer` |
+| Run tests and get a report | `test-runner` |
+
+**Rules:**
+- Never start implementation without the `planner` having produced a design spec and user sign-off first
+- `feature-implementer` and `example-writer` hire `worker` sub-agents for parallel execution when a task splits into 3+ independent parts
+- `test-runner` only reports — it never fixes anything; failures are routed back to `feature-implementer` or `example-writer`
+
+## Architecture
+
+tianshu-rs is an async Rust workflow engine. See `docs/concepts/INDEX.md` for the full module map.
+
+## Build & Test
+
+```bash
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace -- -D warnings
+cargo fmt --all -- --check
+```

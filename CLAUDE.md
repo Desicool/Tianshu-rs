@@ -52,17 +52,38 @@ bd close <id>         # Complete work
 
 ## Build & Test
 
-_Add your build and test commands here_
-
 ```bash
-# Example:
-# npm install
-# npm test
+cargo build --workspace
+cargo test --workspace
+cargo clippy --workspace -- -D warnings
+cargo fmt --all -- --check
 ```
 
 ## Architecture Overview
 
-_Add a brief overview of your project architecture_
+tianshu-rs is an async Rust workflow engine. See `docs/concepts/INDEX.md` for the full module map.
+
+## Development Pipeline
+
+All feature work, examples, and testing go through dedicated agents. **Do not implement, write examples, or run tests directly** — delegate to the appropriate agent.
+
+```
+Feature request  →  planner  →  feature-implementer  →  example-writer
+                                                      ↓
+                                                 test-runner (any time)
+```
+
+| Task | Agent to invoke |
+|------|----------------|
+| Design a new feature or API change | `planner` |
+| Implement an approved spec in `crates/` | `feature-implementer` |
+| Write or fix examples in `examples/` | `example-writer` |
+| Run tests and get a report | `test-runner` |
+
+**Rules:**
+- Never start implementation without the `planner` having produced a design spec and user sign-off first
+- `feature-implementer` and `example-writer` hire `worker` sub-agents for parallel execution when a task splits into 3+ independent parts
+- `test-runner` only reports — it never fixes anything; failures are routed back to `feature-implementer` or `example-writer`
 
 ## Conventions & Patterns
 

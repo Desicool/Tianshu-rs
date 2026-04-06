@@ -1,8 +1,12 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Tests for the OpenAI streaming adapter.
 ///
 /// We test the SSE parsing logic in isolation, which is the core logic
 /// and doesn't require a live HTTP server.
-use workflow_engine_llm_openai::sse::{parse_sse_chunk, SseChunk};
+use tianshu_llm_openai::sse::{parse_sse_chunk, SseChunk};
 
 // ── SSE parser tests ──────────────────────────────────────────────────────────
 
@@ -95,8 +99,8 @@ fn parse_tool_call_arguments_delta() {
 
 // ── Event collection tests ────────────────────────────────────────────────────
 
-use workflow_engine::llm::LlmStreamEvent;
-use workflow_engine_llm_openai::sse::collect_events_from_sse;
+use tianshu::llm::LlmStreamEvent;
+use tianshu_llm_openai::sse::collect_events_from_sse;
 
 #[test]
 fn collect_text_events() {

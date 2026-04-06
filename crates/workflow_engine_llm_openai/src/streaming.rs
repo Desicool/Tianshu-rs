@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// `StreamingLlmProvider` implementation for OpenAI-compatible APIs.
 use anyhow::Result;
 use async_trait::async_trait;
@@ -5,7 +9,7 @@ use futures::StreamExt;
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use workflow_engine::llm::{LlmRequest, LlmStreamEvent, LlmUsage, StreamingLlmProvider, ToolCall};
+use tianshu::llm::{LlmRequest, LlmStreamEvent, LlmUsage, StreamingLlmProvider, ToolCall};
 
 use crate::sse::{parse_sse_chunk, SseChunk};
 use crate::OpenAiProvider;

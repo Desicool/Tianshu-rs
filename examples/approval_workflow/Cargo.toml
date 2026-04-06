@@ -9,10 +9,10 @@ name = "approval_workflow"
 path = "src/main.rs"
 
 [dependencies]
-workflow_engine = { path = "../../crates/workflow_engine" }
-workflow_engine_llm_openai = { path = "../../crates/workflow_engine_llm_openai" }
-workflow_engine_observe = { path = "../../crates/workflow_engine_observe" }
-workflow_engine_postgres = { path = "../../crates/workflow_engine_postgres", optional = true }
+tianshu = { package = "tianshu", path = "../../crates/workflow_engine" }
+tianshu-llm-openai = { package = "tianshu-llm-openai", path = "../../crates/workflow_engine_llm_openai" }
+tianshu-observe = { package = "tianshu-observe", path = "../../crates/workflow_engine_observe" }
+tianshu-postgres = { package = "tianshu-postgres", path = "../../crates/workflow_engine_postgres", optional = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
@@ -22,7 +22,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [features]
-postgres = ["workflow_engine_postgres"]
+postgres = ["tianshu-postgres"]
 
 [dev-dependencies]
 tokio = { workspace = true }

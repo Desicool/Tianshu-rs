@@ -1,12 +1,16 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
-use workflow_engine::Observer;
-use workflow_engine::{
+use tianshu::Observer;
+use tianshu::{
     observe::{LlmCallRecord, StepRecord, WorkflowRecord},
     LlmMessage, LlmRequest, LlmUsage,
 };
-use workflow_engine_observe::InMemoryObserver;
+use tianshu_observe::InMemoryObserver;
 
 fn make_step(case_key: &str, step_name: &str, cached: bool) -> StepRecord {
     StepRecord {

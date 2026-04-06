@@ -25,7 +25,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use tracing::info;
 
-use workflow_engine::{
+use tianshu::{
     context::WorkflowContext,
     workflow::{BaseWorkflow, PollPredicate, WorkflowResult},
 };

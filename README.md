@@ -68,7 +68,7 @@ LangGraph is an excellent tool. Tianshu solves a different problem: you want **t
 | **Error recovery** | Custom retry logic | `RetryPolicy` + `ResilientLlmProvider` with fallbacks |
 | **Sub-workflow spawning** | Subgraphs | `ctx.spawn_child()` — checkpoint-safe, zero resources while waiting |
 | **Context management** | Custom | `ManagedConversation` — auto-compacts at configurable threshold |
-| **License** | MIT | MIT |
+| **License** | MIT | Apache-2.0 |
 
 ### Code comparison
 
@@ -289,14 +289,21 @@ Use `LlmSummaryCompaction` to summarise dropped messages with an LLM call instea
 
 ## Quick start
 
+Add to your `Cargo.toml`:
+
 ```toml
 [dependencies]
-workflow_engine = { git = "https://github.com/your-org/tianshu-rs" }
+tianshu = "0.1"
+
+# Optional add-ons:
+tianshu-llm-openai = "0.1"   # OpenAI-compatible LLM adapter
+tianshu-observe = "0.1"       # structured observability
+tianshu-postgres = "0.1"      # PostgreSQL storage adapters
 ```
 
 ```rust
 use std::sync::Arc;
-use workflow_engine::{
+use tianshu::{
     case::Case,
     context::WorkflowContext,
     engine::{SchedulerEnvironment, SchedulerV2},
@@ -347,7 +354,7 @@ See [`examples/approval_workflow`](examples/approval_workflow/) for a complete e
 A **session** groups related cases. One session can have multiple cases running in parallel:
 
 ```rust
-use workflow_engine::{session::Session, engine::{SchedulerEnvironment, ExecutionMode}};
+use tianshu::{session::Session, engine::{SchedulerEnvironment, ExecutionMode}};
 
 let session = Session::new("session_1")
     .with_metadata(serde_json::json!({"user": "alice"}));
@@ -373,11 +380,14 @@ Session-scoped variables use last-write-wins semantics. **The engine provides no
 
 ## Crates
 
-| Crate | Description |
-|---|---|
-| `workflow_engine` | Core library: scheduler, traits, in-memory stores |
-| `workflow_engine_postgres` | PostgreSQL adapters for `SessionStore` + `CaseStore` + `StateStore` |
-| `workflow_engine_llm_openai` | `LlmProvider` adapter for OpenAI-compatible APIs |
+All crates are published on [crates.io](https://crates.io):
+
+| Crate | crates.io | Description |
+|---|---|---|
+| `tianshu` | [![crates.io](https://img.shields.io/crates/v/tianshu.svg)](https://crates.io/crates/tianshu) | Core library: scheduler, traits, in-memory stores |
+| `tianshu-postgres` | [![crates.io](https://img.shields.io/crates/v/tianshu-postgres.svg)](https://crates.io/crates/tianshu-postgres) | PostgreSQL adapters for `SessionStore` + `CaseStore` + `StateStore` |
+| `tianshu-llm-openai` | [![crates.io](https://img.shields.io/crates/v/tianshu-llm-openai.svg)](https://crates.io/crates/tianshu-llm-openai) | `LlmProvider` adapter for OpenAI-compatible APIs |
+| `tianshu-observe` | [![crates.io](https://img.shields.io/crates/v/tianshu-observe.svg)](https://crates.io/crates/tianshu-observe) | Structured observability and trace recording |
 
 ---
 
@@ -391,7 +401,7 @@ docker-compose up -d
 cargo run -p approval_workflow
 
 # Run with PostgreSQL
-DATABASE_URL=postgres://postgres:postgres@localhost/workflow_engine \
+DATABASE_URL=postgres://postgres:postgres@localhost/tianshu \
   cargo run -p approval_workflow -- --postgres "$DATABASE_URL"
 ```
 
@@ -438,9 +448,9 @@ These are good first contributions. See [CONTRIBUTING.md](CONTRIBUTING.md).
 **Up next:**
 - [ ] OpenTelemetry integration (trace context propagation)
 - [ ] Step-level timing spans
-- [ ] `workflow_engine_sqlite` — SQLite adapter for lightweight deployments
-- [ ] `workflow_engine_mongodb` — MongoDB adapter
-- [ ] `workflow_engine_llm_anthropic` — Claude API adapter
+- [ ] `tianshu-sqlite` — SQLite adapter for lightweight deployments
+- [ ] `tianshu-mongodb` — MongoDB adapter
+- [ ] `tianshu-llm-anthropic` — Claude API adapter
 - [ ] Intent routing example (LLM-based message classification)
 - [ ] Admin API for inspecting and replaying workflows
 
@@ -453,6 +463,6 @@ These are good first contributions. See [CONTRIBUTING.md](CONTRIBUTING.md).
 cargo test --workspace
 
 # PostgreSQL integration tests
-DATABASE_URL=postgres://postgres:postgres@localhost/workflow_engine \
-  cargo test -p workflow_engine_postgres -- --ignored
+DATABASE_URL=postgres://postgres:postgres@localhost/tianshu \
+  cargo test -p tianshu-postgres -- --ignored
 ```

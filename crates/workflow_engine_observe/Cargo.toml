@@ -1,11 +1,18 @@
 [package]
-name = "workflow_engine_observe"
+name = "tianshu-observe"
 version = "0.1.0"
 edition = "2021"
 description = "Observer implementations for the Tianshu workflow engine"
+license = "Apache-2.0"
+repository = "https://github.com/Desicool/Tianshu-rs"
+homepage = "https://github.com/Desicool/Tianshu-rs"
+documentation = "https://docs.rs/tianshu-observe"
+keywords = ["workflow", "observability", "tracing", "async", "orchestration"]
+categories = ["asynchronous", "development-tools"]
+readme = "../../README.md"
 
 [dependencies]
-workflow_engine = { path = "../workflow_engine" }
+tianshu = { package = "tianshu", path = "../workflow_engine", version = "0.1.0" }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

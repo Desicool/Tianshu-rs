@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 //! Observer implementations for the Tianshu workflow engine.
 //!
 //! This crate provides ready-made `Observer` implementations and dataset
@@ -17,7 +21,7 @@
 //! input/output pairs from collected records:
 //!
 //! ```rust,ignore
-//! use workflow_engine_observe::{InMemoryObserver, dataset::step_dataset};
+//! use tianshu_observe::{InMemoryObserver, dataset::step_dataset};
 //!
 //! let obs = Arc::new(InMemoryObserver::new());
 //! scheduler.set_observer(obs.clone());

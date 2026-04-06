@@ -1,6 +1,10 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Tests for WorkflowContext with trait-based CaseStore + StateStore.
 use std::sync::Arc;
-use workflow_engine::{
+use tianshu::{
     case::{Case, ExecutionState},
     store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateStore},
     WorkflowContext,

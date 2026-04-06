@@ -1,8 +1,12 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::{json, Value as JsonValue};
-use workflow_engine::llm::ToolCall;
-use workflow_engine::tool::{Tool, ToolRegistry, ToolSafety};
+use tianshu::llm::ToolCall;
+use tianshu::tool::{Tool, ToolRegistry, ToolSafety};
 
 // ── Test tools ──────────────────────────────────────────────────────────────
 
@@ -299,7 +303,7 @@ async fn execute_with_concurrency_returns_per_tool_duration() {
     ];
 
     // execute_with_concurrency now returns Vec<(ToolResult, u64)>
-    let results: Vec<(workflow_engine::llm::ToolResult, u64)> =
+    let results: Vec<(tianshu::llm::ToolResult, u64)> =
         registry.execute_with_concurrency(&calls, 10).await;
 
     assert_eq!(results.len(), 2);
@@ -336,7 +340,7 @@ async fn execute_with_concurrency_exclusive_returns_duration() {
         arguments: "{}".into(),
     }];
 
-    let results: Vec<(workflow_engine::llm::ToolResult, u64)> =
+    let results: Vec<(tianshu::llm::ToolResult, u64)> =
         registry.execute_with_concurrency(&calls, 10).await;
 
     assert_eq!(results.len(), 1);

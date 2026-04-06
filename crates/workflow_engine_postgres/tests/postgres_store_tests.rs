@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// PostgreSQL store integration tests.
 ///
 /// These tests require a live PostgreSQL instance and are gated with `#[ignore]`.
@@ -7,17 +11,16 @@
 ///   DATABASE_URL=postgres://postgres:password@localhost/test_db \
 ///     cargo test -p workflow_engine_postgres --test postgres_store_tests -- --ignored
 use std::sync::Arc;
-use workflow_engine::{
+use tianshu::{
     case::{Case, ExecutionState},
     store::{CaseStore, StateStore},
 };
-use workflow_engine_postgres::{PostgresCaseStore, PostgresStateStore};
+use tianshu_postgres::{PostgresCaseStore, PostgresStateStore};
 
 async fn make_stores() -> (Arc<PostgresCaseStore>, Arc<PostgresStateStore>) {
     let db_url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set to run postgres integration tests");
-    let pool =
-        workflow_engine_postgres::build_pool(&db_url).expect("failed to build connection pool");
+    let pool = tianshu_postgres::build_pool(&db_url).expect("failed to build connection pool");
 
     let case_store = Arc::new(PostgresCaseStore::new(pool.clone()));
     let state_store = Arc::new(PostgresStateStore::new(pool));

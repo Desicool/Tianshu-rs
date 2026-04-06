@@ -1,6 +1,10 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use serde_json::json;
-use workflow_engine::spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
-use workflow_engine::Case;
+use tianshu::spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
+use tianshu::Case;
 
 #[test]
 fn spawn_config_construction() {

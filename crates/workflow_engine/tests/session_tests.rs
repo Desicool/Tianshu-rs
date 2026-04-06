@@ -1,5 +1,9 @@
-use workflow_engine::session::Session;
-use workflow_engine::store::{InMemorySessionStore, SessionStore};
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
+use tianshu::session::Session;
+use tianshu::store::{InMemorySessionStore, SessionStore};
 
 #[test]
 fn session_new_sets_defaults() {

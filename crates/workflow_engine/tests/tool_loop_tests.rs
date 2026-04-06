@@ -1,13 +1,17 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::Result;
 use async_trait::async_trait;
 use serde_json::{json, Value as JsonValue};
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
-use workflow_engine::llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage, ToolCall};
-use workflow_engine::observe::{Observer, ToolCallRecord};
-use workflow_engine::tool::{Tool, ToolRegistry, ToolSafety};
-use workflow_engine::tool_loop::{run_tool_loop, ToolLoopConfig};
+use tianshu::llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, LlmUsage, ToolCall};
+use tianshu::observe::{Observer, ToolCallRecord};
+use tianshu::tool::{Tool, ToolRegistry, ToolSafety};
+use tianshu::tool_loop::{run_tool_loop, ToolLoopConfig};
 
 // ── Mock LLM ─────────────────────────────────────────────────────────────────
 

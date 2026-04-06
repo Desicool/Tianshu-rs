@@ -1,6 +1,6 @@
 pub mod workflows;
 
-use workflow_engine::WorkflowRegistry;
+use tianshu::WorkflowRegistry;
 use workflows::ApprovalWorkflow;
 
 /// Register all workflows into the registry.

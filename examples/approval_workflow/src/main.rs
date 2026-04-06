@@ -16,7 +16,7 @@ use std::time::Duration;
 use anyhow::Result;
 use tracing::info;
 
-use workflow_engine::{
+use tianshu::{
     case::Case,
     engine::{shutdown_signal, ExecutionMode, SchedulerEnvironment, SchedulerV2, TickResult},
     poll::ResourceFetcher,
@@ -24,7 +24,7 @@ use workflow_engine::{
     store::{CaseStore, InMemoryCaseStore, InMemoryStateStore, StateStore},
     WorkflowRegistry,
 };
-use workflow_engine_observe::{
+use tianshu_observe::{
     dataset::{llm_dataset, step_dataset, workflow_dataset},
     CompositeObserver, InMemoryObserver, JsonlObserver,
 };
@@ -86,11 +86,9 @@ async fn main() -> Result<()> {
                 .find(|w| w[0] == "--postgres")
                 .map(|w| w[1].clone())
                 .expect("--postgres requires a DATABASE_URL argument");
-            let pool = workflow_engine_postgres::build_pool(&db_url)?;
-            let cs = Arc::new(workflow_engine_postgres::PostgresCaseStore::new(
-                pool.clone(),
-            ));
-            let ss = Arc::new(workflow_engine_postgres::PostgresStateStore::new(pool));
+            let pool = tianshu_postgres::build_pool(&db_url)?;
+            let cs = Arc::new(tianshu_postgres::PostgresCaseStore::new(pool.clone()));
+            let ss = Arc::new(tianshu_postgres::PostgresStateStore::new(pool));
             cs.setup().await?;
             ss.setup().await?;
             (cs, ss)
@@ -125,7 +123,7 @@ async fn main() -> Result<()> {
         .find(|w| w[0] == "--jsonl")
         .map(|w| w[1].clone());
 
-    let observer: Arc<dyn workflow_engine::Observer> = if let Some(path) = &jsonl_path {
+    let observer: Arc<dyn tianshu::Observer> = if let Some(path) = &jsonl_path {
         let jsonl_obs = JsonlObserver::new(path).await?;
         info!("Writing traces to JSONL: {}", path);
         Arc::new(CompositeObserver::new(vec![

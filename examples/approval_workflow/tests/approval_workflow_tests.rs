@@ -1,6 +1,6 @@
 /// Tests for the approval workflow — pure in-memory, no database, no LLM calls.
 use std::sync::Arc;
-use workflow_engine::{
+use tianshu::{
     case::{Case, ExecutionState},
     engine::{SchedulerEnvironment, SchedulerV2},
     store::{InMemoryCaseStore, InMemoryStateStore},
@@ -37,8 +37,8 @@ async fn tick(
         .tick(
             env,
             registry,
-            cs as Arc<dyn workflow_engine::store::CaseStore>,
-            ss as Arc<dyn workflow_engine::store::StateStore>,
+            cs as Arc<dyn tianshu::store::CaseStore>,
+            ss as Arc<dyn tianshu::store::StateStore>,
             None,
             None,
         )

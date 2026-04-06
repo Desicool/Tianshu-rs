@@ -1,10 +1,14 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Tests for OpenAI-compatible LlmProvider adapter.
 ///
 /// These tests verify construction, configuration, and the LlmProvider
 /// trait contract WITHOUT making real HTTP calls.
 use std::sync::Arc;
-use workflow_engine::llm::{LlmMessage, LlmProvider, LlmRequest};
-use workflow_engine_llm_openai::OpenAiProvider;
+use tianshu::llm::{LlmMessage, LlmProvider, LlmRequest};
+use tianshu_llm_openai::OpenAiProvider;
 
 #[test]
 fn provider_default_base_url() {

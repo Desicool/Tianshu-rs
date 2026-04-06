@@ -1,3 +1,7 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use anyhow::Result;
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use native_tls::TlsConnector;

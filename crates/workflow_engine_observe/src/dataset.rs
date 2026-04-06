@@ -1,5 +1,9 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use serde_json::{json, Value as JsonValue};
-use workflow_engine::observe::{LlmCallRecord, StepRecord, WorkflowRecord};
+use tianshu::observe::{LlmCallRecord, StepRecord, WorkflowRecord};
 
 /// A single input/output pair suitable for RLHF training datasets.
 #[derive(Debug, Clone)]

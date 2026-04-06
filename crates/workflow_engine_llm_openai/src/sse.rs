@@ -1,8 +1,12 @@
+// Copyright 2026 Desicool
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /// Server-Sent Events (SSE) parser for OpenAI streaming completions.
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 
-use workflow_engine::llm::{LlmStreamEvent, LlmUsage, ToolCall};
+use tianshu::llm::{LlmStreamEvent, LlmUsage, ToolCall};
 
 /// A parsed SSE chunk from the streaming response.
 #[derive(Debug)]

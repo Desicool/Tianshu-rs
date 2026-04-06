@@ -47,6 +47,7 @@ pub struct Case {
     pub private_vars: Option<JsonValue>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub depth: u32,
 }
 
 impl Case {
@@ -67,6 +68,7 @@ impl Case {
             private_vars: None,
             created_at: now,
             updated_at: now,
+            depth: 0,
         }
     }
 
@@ -130,6 +132,7 @@ pub fn make_case(
         private_vars: Some(serde_json::json!({"case_type": case_type})),
         created_at: now,
         updated_at: now,
+        depth: 0,
     }
 }
 

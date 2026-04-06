@@ -39,3 +39,14 @@ pub enum ChildrenResult {
     /// Some children are still in-flight; value is the count of pending children.
     Pending(usize),
 }
+
+/// Result of attempting to spawn a child workflow.
+pub enum SpawnResult {
+    /// The child was successfully spawned.
+    Spawned(ChildHandle),
+    /// The depth limit was reached; spawning was blocked.
+    DepthLimitReached {
+        request_id: String,
+        situation: String,
+    },
+}

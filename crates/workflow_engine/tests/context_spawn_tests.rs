@@ -3,7 +3,7 @@ use std::sync::Arc;
 use serde_json::json;
 use workflow_engine::case::{Case, ExecutionState};
 use workflow_engine::context::WorkflowContext;
-use workflow_engine::spawn::{ChildrenResult, SpawnConfig};
+use workflow_engine::spawn::{ChildHandle, ChildrenResult, SpawnConfig, SpawnResult};
 use workflow_engine::store::{CaseStore, InMemoryCaseStore, InMemoryStateStore};
 
 fn make_ctx(case_key: &str) -> (WorkflowContext, Arc<InMemoryCaseStore>) {
@@ -12,6 +12,19 @@ fn make_ctx(case_key: &str) -> (WorkflowContext, Arc<InMemoryCaseStore>) {
     let state_store = Arc::new(InMemoryStateStore::default());
     let ctx = WorkflowContext::new(case, case_store.clone(), state_store);
     (ctx, case_store)
+}
+
+fn unwrap_spawned(result: SpawnResult) -> ChildHandle {
+    match result {
+        SpawnResult::Spawned(h) => h,
+        SpawnResult::DepthLimitReached { situation, .. } => {
+            panic!("expected Spawned, got DepthLimitReached: {}", situation)
+        }
+    }
+}
+
+fn unwrap_spawned_vec(results: Vec<SpawnResult>) -> Vec<ChildHandle> {
+    results.into_iter().map(unwrap_spawned).collect()
 }
 
 #[tokio::test]
@@ -24,7 +37,7 @@ async fn spawn_child_creates_case_in_store() {
         case_key: Some("child_case_1".into()),
     };
 
-    let handle = ctx.spawn_child(config).await.unwrap();
+    let handle = unwrap_spawned(ctx.spawn_child(config).await.unwrap());
     assert_eq!(handle.case_key, "child_case_1");
     assert_eq!(handle.workflow_code, "child_wf");
 
@@ -62,7 +75,7 @@ async fn spawn_children_creates_multiple() {
         },
     ];
 
-    let handles = ctx.spawn_children(configs).await.unwrap();
+    let handles = unwrap_spawned_vec(ctx.spawn_children(configs).await.unwrap());
     assert_eq!(handles.len(), 3);
 
     // All three should exist in the store
@@ -85,7 +98,7 @@ async fn child_status_running() {
         case_key: Some("running_child".into()),
     };
 
-    let handle = ctx.spawn_child(config).await.unwrap();
+    let handle = unwrap_spawned(ctx.spawn_child(config).await.unwrap());
     let status = ctx.child_status(&handle).await.unwrap();
     assert!(
         matches!(status, workflow_engine::spawn::ChildStatus::Running),
@@ -103,7 +116,7 @@ async fn child_status_finished() {
         case_key: Some("finish_child".into()),
     };
 
-    let handle = ctx.spawn_child(config).await.unwrap();
+    let handle = unwrap_spawned(ctx.spawn_child(config).await.unwrap());
 
     // Manually finish the child
     let mut child = case_store
@@ -147,7 +160,7 @@ async fn await_children_pending_when_any_running() {
         },
     ];
 
-    let handles = ctx.spawn_children(configs).await.unwrap();
+    let handles = unwrap_spawned_vec(ctx.spawn_children(configs).await.unwrap());
 
     // Both children are still Running
     let result = ctx.await_children(&handles).await.unwrap();
@@ -174,7 +187,7 @@ async fn await_children_all_done_when_finished() {
         },
     ];
 
-    let handles = ctx.spawn_children(configs).await.unwrap();
+    let handles = unwrap_spawned_vec(ctx.spawn_children(configs).await.unwrap());
 
     // Finish both children
     for key in &["ad_child_1", "ad_child_2"] {

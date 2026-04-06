@@ -40,7 +40,7 @@ pub use poll::{IntentRouterV2, PollEvaluator, PollMatch, ResourceFetcher};
 pub use registry::WorkflowRegistry;
 pub use retry::{with_retry, ErrorClass, RetryContext, RetryPolicy};
 pub use session::Session;
-pub use spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
+pub use spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig, SpawnResult};
 pub use stage::{run_stages, StageBase, StageKey, StageOutcome};
 pub use store::{
     CaseStore, InMemoryCaseStore, InMemorySessionStore, InMemoryStateStore, SessionStateEntry,

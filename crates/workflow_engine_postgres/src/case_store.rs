@@ -42,6 +42,7 @@ impl PostgresCaseStore {
             private_vars: row.get("private_vars"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            depth: row.get::<_, i32>("depth") as u32,
         })
     }
 }
@@ -63,9 +64,9 @@ impl CaseStore for PostgresCaseStore {
                     execution_state, finished_type, finished_description,
                     parent_key, child_keys, lifecycle_state,
                     processing_report, resource_data, private_vars,
-                    created_at, updated_at
+                    created_at, updated_at, depth
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                 ON CONFLICT (case_key) DO UPDATE SET
                     session_id         = EXCLUDED.session_id,
                     workflow_code      = EXCLUDED.workflow_code,
@@ -78,7 +79,8 @@ impl CaseStore for PostgresCaseStore {
                     processing_report  = EXCLUDED.processing_report,
                     resource_data      = EXCLUDED.resource_data,
                     private_vars       = EXCLUDED.private_vars,
-                    updated_at         = EXCLUDED.updated_at
+                    updated_at         = EXCLUDED.updated_at,
+                    depth              = EXCLUDED.depth
                 "#,
                 &[
                     &case.case_key,
@@ -95,6 +97,7 @@ impl CaseStore for PostgresCaseStore {
                     &case.private_vars,
                     &case.created_at,
                     &case.updated_at,
+                    &(case.depth as i32),
                 ],
             )
             .await?;
@@ -149,8 +152,11 @@ impl CaseStore for PostgresCaseStore {
                     resource_data       JSONB,
                     private_vars        JSONB,
                     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-                    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    depth               INTEGER NOT NULL DEFAULT 0
                 )
+                -- Migration for existing tables:
+                -- ALTER TABLE wf_cases ADD COLUMN depth INTEGER NOT NULL DEFAULT 0;
                 "#,
                 &[],
             )

@@ -11,7 +11,7 @@ use crate::compact::ManagedConversation;
 use crate::llm::{LlmProvider, LlmRequest};
 use crate::observe::{Observer, StepRecord, WorkflowRecord};
 use crate::retry::RetryPolicy;
-use crate::spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
+use crate::spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig, SpawnResult};
 use crate::store::{CaseStore, StateStore};
 use crate::tool::ToolRegistry;
 use crate::tool_loop::{run_tool_loop, ToolLoopConfig, ToolLoopResult};
@@ -42,6 +42,9 @@ pub struct WorkflowContext {
 
     /// Optional managed conversation for automatic context compaction.
     managed_conversation: Option<ManagedConversation>,
+
+    /// Maximum allowed spawn depth. 0 means unlimited is not allowed (always blocks).
+    max_depth: u32,
 }
 
 impl WorkflowContext {
@@ -49,6 +52,16 @@ impl WorkflowContext {
         case: Case,
         case_store: Arc<dyn CaseStore>,
         state_store: Arc<dyn StateStore>,
+    ) -> Self {
+        Self::with_max_depth(case, case_store, state_store, 3)
+    }
+
+    /// Create a context with a specific maximum spawn depth.
+    pub fn with_max_depth(
+        case: Case,
+        case_store: Arc<dyn CaseStore>,
+        state_store: Arc<dyn StateStore>,
+        max_depth: u32,
     ) -> Self {
         let initial_resource_data = case.resource_data.clone();
         Self {
@@ -61,12 +74,46 @@ impl WorkflowContext {
             tick_start: Instant::now(),
             initial_resource_data,
             managed_conversation: None,
+            max_depth,
         }
     }
 
     /// Attach an observer to this context. Must be called before any steps run.
     pub fn set_observer(&mut self, observer: Arc<dyn Observer>) {
         self.observer = Some(observer);
+    }
+
+    /// Returns the current spawn depth of this workflow.
+    pub fn current_depth(&self) -> u32 {
+        self.case.depth
+    }
+
+    /// Returns the configured maximum spawn depth.
+    pub fn max_depth(&self) -> u32 {
+        self.max_depth
+    }
+
+    /// Returns true if the current depth is at or beyond the maximum.
+    pub fn at_max_depth(&self) -> bool {
+        self.case.depth >= self.max_depth
+    }
+
+    /// Update the maximum spawn depth and persist it to StateStore.
+    pub async fn set_max_depth(&mut self, new_limit: u32) -> Result<()> {
+        self.max_depth = new_limit;
+        self.set_state("max_depth", new_limit).await
+    }
+
+    /// Load a persisted max_depth override from StateStore (key: `wf_state_max_depth`).
+    /// Applies the persisted value if present, otherwise keeps the current value.
+    async fn load_max_depth_override(&mut self) -> Result<()> {
+        let step_key = "wf_state_max_depth";
+        if let Some(entry) = self.state_store.get(&self.case.case_key, step_key).await? {
+            if let Ok(v) = serde_json::from_str::<u32>(&entry.data) {
+                self.max_depth = v;
+            }
+        }
+        Ok(())
     }
 
     /// Returns all step records accumulated in this tick.
@@ -369,7 +416,33 @@ impl WorkflowContext {
     // ── Child workflow spawning ────────────────────────────────────────────
 
     /// Spawn a child workflow. The child is immediately created in Running state.
-    pub async fn spawn_child(&mut self, config: SpawnConfig) -> Result<ChildHandle> {
+    ///
+    /// Returns `SpawnResult::DepthLimitReached` if spawning would exceed the max depth.
+    pub async fn spawn_child(&mut self, config: SpawnConfig) -> Result<SpawnResult> {
+        // Load any persisted override before checking depth.
+        self.load_max_depth_override().await?;
+
+        let child_depth = self.case.depth + 1;
+        if self.max_depth == 0 || child_depth > self.max_depth {
+            let request_id = uuid::Uuid::new_v4().to_string();
+            let situation = format!(
+                "workflow '{}' (case '{}', depth {}) attempted to spawn child workflow '{}' \
+                 but max_depth is {}. Approve a new max_depth to continue.",
+                self.case.workflow_code,
+                self.case.case_key,
+                self.case.depth,
+                config.workflow_code,
+                self.max_depth,
+            );
+            // Persist the pending request so it survives restarts.
+            self.set_state(&format!("depth_approval_{}", request_id), &situation)
+                .await?;
+            return Ok(SpawnResult::DepthLimitReached {
+                request_id,
+                situation,
+            });
+        }
+
         let child_key = config.case_key.unwrap_or_else(|| {
             format!(
                 "{}_{}_child_{}",
@@ -386,24 +459,25 @@ impl WorkflowContext {
         );
         child.parent_key = Some(self.case.case_key.clone());
         child.resource_data = config.resource_data;
+        child.depth = child_depth;
 
         self.case_store.upsert(&child).await?;
         self.case.child_keys.push(child_key.clone());
         self.case_store.upsert(&self.case).await?;
 
-        Ok(ChildHandle {
+        Ok(SpawnResult::Spawned(ChildHandle {
             case_key: child_key,
             workflow_code: config.workflow_code,
-        })
+        }))
     }
 
     /// Spawn multiple child workflows at once.
-    pub async fn spawn_children(&mut self, configs: Vec<SpawnConfig>) -> Result<Vec<ChildHandle>> {
-        let mut handles = Vec::new();
+    pub async fn spawn_children(&mut self, configs: Vec<SpawnConfig>) -> Result<Vec<SpawnResult>> {
+        let mut results = Vec::new();
         for config in configs {
-            handles.push(self.spawn_child(config).await?);
+            results.push(self.spawn_child(config).await?);
         }
-        Ok(handles)
+        Ok(results)
     }
 
     /// Check the status of a single child workflow.

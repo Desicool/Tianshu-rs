@@ -320,6 +320,7 @@ mod tests {
         async fn complete(&self, request: LlmRequest) -> Result<LlmResponse> {
             Ok(LlmResponse {
                 content: format!("response to {}", request.model),
+                tool_calls: None,
                 usage: LlmUsage {
                     prompt_tokens: 10,
                     completion_tokens: 5,
@@ -353,7 +354,6 @@ mod tests {
             }],
             temperature: Some(0.7),
             max_tokens: Some(100),
-
             tools: None,
         }
     }

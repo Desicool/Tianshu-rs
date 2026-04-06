@@ -142,6 +142,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "conversation_agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "example_tools",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workflow_engine",
+ "workflow_engine_llm_openai",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -264,6 +280,20 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "example_tools"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "workflow_engine",
 ]
 
 [[package]]
@@ -795,6 +825,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "multi_agent_swarm"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "example_tools",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workflow_engine",
+ "workflow_engine_llm_openai",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -968,6 +1014,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7edddbd0b52d732b21ad9a5fab5c704c14cd949e5e9a1ec5929a24fded1b904c"
 
 [[package]]
+name = "plan_and_execute"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "example_tools",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workflow_engine",
+ "workflow_engine_llm_openai",
+ "workflow_engine_observe",
+]
+
+[[package]]
 name = "postgres-protocol"
 version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1069,6 +1132,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76afc826de14238e6e8c374ddcc1fa19e374fd8dd986b0d2af0d02377261d83c"
 dependencies = [
  "getrandom 0.3.4",
+]
+
+[[package]]
+name = "react_agent"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "example_tools",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workflow_engine",
+ "workflow_engine_llm_openai",
+ "workflow_engine_observe",
 ]
 
 [[package]]
@@ -1534,6 +1614,23 @@ dependencies = [
  "futures-sink",
  "pin-project-lite",
  "tokio",
+]
+
+[[package]]
+name = "tool_orchestration"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "example_tools",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "workflow_engine",
+ "workflow_engine_llm_openai",
+ "workflow_engine_observe",
 ]
 
 [[package]]

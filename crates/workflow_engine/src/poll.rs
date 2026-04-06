@@ -266,6 +266,7 @@ mod tests {
             async fn complete(&self, req: LlmRequest) -> Result<LlmResponse> {
                 Ok(LlmResponse {
                     content: req.messages[0].content.clone(),
+                    tool_calls: None,
                     usage: LlmUsage {
                         prompt_tokens: 1,
                         completion_tokens: 1,

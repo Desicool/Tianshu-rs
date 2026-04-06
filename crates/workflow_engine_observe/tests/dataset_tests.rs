@@ -47,14 +47,11 @@ fn llm(model: &str) -> LlmCallRecord {
             messages: vec![LlmMessage {
                 role: "user".to_string(),
                 content: "classify this".to_string(),
-
                 tool_calls: None,
-
                 tool_call_id: None,
             }],
             temperature: None,
             max_tokens: None,
-
             tools: None,
         },
         response_content: Some("category: A".to_string()),

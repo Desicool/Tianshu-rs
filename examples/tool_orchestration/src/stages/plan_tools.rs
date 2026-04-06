@@ -14,7 +14,7 @@ use tracing::info;
 use example_tools::{ToolRegistry, ToolSafety};
 use workflow_engine::{
     context::WorkflowContext,
-    llm::{LlmMessage, LlmProvider, LlmRequest, ToolCall},
+    llm::{LlmMessage, LlmProvider, LlmRequest, LlmResponse, ToolCall},
     stage::{StageBase, StageOutcome},
 };
 
@@ -33,6 +33,8 @@ impl StageBase<OrchStage> for PlanToolsStage {
     }
 
     fn step_keys(&self) -> &[&str] {
+        // Step keys are declared as a static pattern; the actual step names are
+        // round-qualified at runtime (e.g. "plan_tools_step_0", "plan_tools_step_1").
         &["plan_tools_step"]
     }
 
@@ -58,31 +60,47 @@ impl StageBase<OrchStage> for PlanToolsStage {
             messages.push(LlmMessage::user(task));
         }
 
+        // Each call to PlanToolsStage gets a unique round number so that the
+        // checkpoint key is distinct per round.  Without this, a multi-round
+        // workflow would hit the round-0 cache on every subsequent round.
+        let plan_round: u64 = ctx.get_state("orch_plan_round", 0u64).await?;
+        let step_name = format!("plan_tools_step_{plan_round}");
+
         // Snapshot messages for the step closure (avoid borrowing ctx inside).
         let messages_snap = messages.clone();
+        // Keep a second clone for use after the step (building updated_messages).
+        let messages_before_step = messages_snap.clone();
         let llm_tools = tools_arc.to_llm_tools();
 
-        // Build the LLM request.
-        let request = LlmRequest {
-            model: model.clone(),
-            system_prompt: Some(
-                "You are a helpful assistant with access to tools. \
-                 Use tools when they are the most effective way to answer. \
-                 When you have all the information you need, give a final answer directly."
-                    .to_string(),
-            ),
-            messages: messages_snap.clone(),
-            temperature: None,
-            max_tokens: None,
-            tools: Some(llm_tools),
-        };
+        // Checkpoint the LLM call so that crash+replay skips it and returns
+        // the cached LlmResponse rather than calling the LLM again.
+        let response: LlmResponse = ctx
+            .step(&step_name, |_ctx| async move {
+                let request = LlmRequest {
+                    model: model.clone(),
+                    system_prompt: Some(
+                        "You are a helpful assistant with access to tools. \
+                         Use tools when they are the most effective way to answer. \
+                         When you have all the information you need, give a final answer directly."
+                            .to_string(),
+                    ),
+                    messages: messages_snap.clone(),
+                    temperature: None,
+                    max_tokens: None,
+                    tools: Some(llm_tools),
+                };
 
-        info!(
-            "PlanTools: calling LLM with {} messages",
-            messages_snap.len()
-        );
+                info!(
+                    "PlanTools: calling LLM with {} messages",
+                    request.messages.len()
+                );
 
-        let response = llm.complete(request).await?;
+                llm.complete(request).await
+            })
+            .await?;
+
+        // Advance the round counter so the next PlanTools call gets a fresh step name.
+        ctx.set_state("orch_plan_round", plan_round + 1).await?;
 
         if response.finish_reason == "tool_use" {
             let tool_calls = response.tool_calls.unwrap_or_default();
@@ -103,7 +121,7 @@ impl StageBase<OrchStage> for PlanToolsStage {
             );
 
             // Append assistant message with tool calls to history.
-            let mut updated_messages = messages_snap.clone();
+            let mut updated_messages = messages_before_step.clone();
             updated_messages.push(LlmMessage::assistant_with_tool_calls(
                 response.content,
                 tool_calls.clone(),
@@ -123,7 +141,7 @@ impl StageBase<OrchStage> for PlanToolsStage {
             // LLM returned a final answer ("stop" or "end_turn").
             info!("PlanTools: stop — advancing to Synthesize");
 
-            let mut updated_messages = messages_snap.clone();
+            let mut updated_messages = messages_before_step.clone();
             updated_messages.push(LlmMessage::assistant(response.content));
             ctx.set_state("orch_messages", updated_messages).await?;
 

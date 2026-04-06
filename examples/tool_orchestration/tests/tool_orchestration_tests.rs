@@ -511,3 +511,92 @@ async fn workflow_registers_correctly() {
         .registered_codes()
         .contains(&"tool_orchestration".to_string()));
 }
+
+/// Test 7: PlanToolsStage must use ctx.step("plan_tools_step", ...) so that a
+/// pre-seeded checkpoint prevents the LLM from being called on replay.
+///
+/// This test is the RED phase of TDD for the checkpoint fix.  Before the fix,
+/// PlanToolsStage calls the LLM unconditionally (no ctx.step), so the mock LLM
+/// will be called even though a cached response is already in the state store.
+/// After the fix, the LLM call count must be zero.
+#[tokio::test]
+async fn plan_tools_stage_uses_checkpoint_on_replay() {
+    use workflow_engine::{
+        context::WorkflowContext,
+        llm::{LlmResponse, LlmUsage},
+        store::{InMemoryCaseStore, InMemoryStateStore, StateStore},
+    };
+
+    // --- Set up stores and pre-seed a "stop" checkpoint so PlanToolsStage
+    //     thinks the LLM already ran for this case.
+    let cs = Arc::new(InMemoryCaseStore::default());
+    let ss = Arc::new(InMemoryStateStore::default());
+
+    let case_key = "ck_checkpoint_test";
+
+    // The checkpoint key used by ctx.step("plan_tools_step_0") on round 0 is
+    // "wf_plan_tools_step_0" (WorkflowContext::checkpoint_step_key prefixes with "wf_").
+    let cached_response = LlmResponse {
+        content: "Cached direct answer".to_string(),
+        tool_calls: None,
+        usage: LlmUsage {
+            prompt_tokens: 1,
+            completion_tokens: 1,
+        },
+        finish_reason: "stop".to_string(),
+    };
+    let cached_json = serde_json::to_string(&cached_response).unwrap();
+    ss.save(case_key, "wf_plan_tools_step_0", &cached_json)
+        .await
+        .unwrap();
+
+    // --- Build a counting mock LLM.  After the fix, complete() must NOT be called.
+    struct CountingLlm {
+        count: Arc<AtomicUsize>,
+    }
+    #[async_trait]
+    impl LlmProvider for CountingLlm {
+        async fn complete(&self, _req: LlmRequest) -> Result<LlmResponse> {
+            self.count.fetch_add(1, Ordering::SeqCst);
+            Ok(LlmResponse {
+                content: "SHOULD NOT BE CALLED".to_string(),
+                tool_calls: None,
+                usage: LlmUsage {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                },
+                finish_reason: "stop".to_string(),
+            })
+        }
+    }
+
+    let call_count = Arc::new(AtomicUsize::new(0));
+    let llm: Arc<dyn LlmProvider> = Arc::new(CountingLlm {
+        count: Arc::clone(&call_count),
+    });
+
+    // --- Build a WorkflowContext with the pre-seeded state store.
+    let case = make_case(case_key, "What is 6x7?");
+    let mut ctx = WorkflowContext::new(
+        case,
+        cs as Arc<dyn workflow_engine::store::CaseStore>,
+        ss as Arc<dyn workflow_engine::store::StateStore>,
+    );
+
+    // --- Execute PlanToolsStage.
+    let tools = Arc::new(ToolRegistry::new());
+    let stage = PlanToolsStage {
+        llm,
+        model: "mock".to_string(),
+        tools,
+    };
+    let _outcome = stage.execute(&mut ctx).await.unwrap();
+
+    // ASSERTION: LLM must not have been called because the checkpoint was hit.
+    assert_eq!(
+        call_count.load(Ordering::SeqCst),
+        0,
+        "PlanToolsStage must use ctx.step() so that a cached checkpoint \
+         prevents the LLM from being called on replay"
+    );
+}

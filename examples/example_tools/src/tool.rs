@@ -228,9 +228,13 @@ pub async fn run_tool_loop(
                 .map(|t| t.safety())
                 .unwrap_or(ToolSafety::Exclusive);
             let result = if safety == ToolSafety::ConcurrentSafe {
-                safe_iter.next().expect("safe result missing")
+                safe_iter
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("safe result missing for '{}'", call.name))?
             } else {
-                excl_iter.next().expect("exclusive result missing")
+                excl_iter
+                    .next()
+                    .ok_or_else(|| anyhow::anyhow!("exclusive result missing for '{}'", call.name))?
             };
             results.push(result);
         }
@@ -619,5 +623,49 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(text, "Synthesised answer");
+    }
+
+    /// Regression test: when the LLM emits a tool call for an *unknown* tool
+    /// (not registered in the registry), the merge loop must not panic.
+    ///
+    /// Unknown tools are classified as Exclusive on both the partition pass and
+    /// the merge pass (`unwrap_or(false)` / `unwrap_or(ToolSafety::Exclusive)`),
+    /// so they land in the exclusive bucket and the merge correctly pulls their
+    /// error result.  This test pins that contract and ensures the merge loop
+    /// uses proper error propagation rather than `expect()`.
+    #[tokio::test]
+    async fn run_tool_loop_unknown_tool_does_not_panic() {
+        let mut reg = ToolRegistry::new();
+        reg.register(EchoTool {
+            name: "echo",
+            safety: ToolSafety::ConcurrentSafe,
+            reply: "echo_result",
+        });
+        // "unknown_tool" is NOT registered — it will be treated as Exclusive.
+
+        let llm = MockLlmProvider::new(vec![
+            multi_tool_use_response(vec![
+                ("echo", "id_echo", json!({})),
+                ("unknown_tool", "id_unknown", json!({})),
+            ]),
+            stop_response("Done"),
+        ]);
+
+        let (text, messages) = run_tool_loop(&llm, make_request(), &reg, 3)
+            .await
+            .expect("run_tool_loop must not return an error for unknown tools");
+
+        assert_eq!(text, "Done");
+
+        // Both tool calls should produce a result (echo OK, unknown_tool error).
+        let tool_results = messages[2].tool_results.as_ref().expect("tool results");
+        assert_eq!(tool_results.len(), 2);
+        // First result: echo succeeded.
+        assert_eq!(tool_results[0].tool_use_id, "id_echo");
+        assert_eq!(tool_results[0].content, "echo_result");
+        assert!(!tool_results[0].is_error);
+        // Second result: unknown_tool — registry returns an error ToolResult.
+        assert_eq!(tool_results[1].tool_use_id, "id_unknown");
+        assert!(tool_results[1].is_error);
     }
 }

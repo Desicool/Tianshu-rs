@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -16,6 +14,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  approval_workflow:
+    build: .
+    command: ["--postgres", "postgres://postgres:postgres@postgres/workflow_engine"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      RUST_LOG: info
 
 volumes:
   postgres_data:

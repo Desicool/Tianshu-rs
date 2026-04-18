@@ -13,6 +13,7 @@ tianshu = { package = "tianshu", path = "../../crates/workflow_engine" }
 tianshu-llm-openai = { package = "tianshu-llm-openai", path = "../../crates/workflow_engine_llm_openai" }
 tianshu-observe = { package = "tianshu-observe", path = "../../crates/workflow_engine_observe" }
 tianshu-postgres = { package = "tianshu-postgres", path = "../../crates/workflow_engine_postgres", optional = true }
+tianshu-dashboard = { package = "tianshu-dashboard", path = "../../crates/workflow_engine_dashboard" }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }

@@ -4,12 +4,14 @@
 //! Pass `--postgres <DATABASE_URL>` to use PostgreSQL instead.
 //! Pass `--jsonl <PATH>` to write traces to a JSONL file.
 //! Pass `--parallel` to run multiple workflows in parallel mode.
+//! Pass `--dashboard <PORT>` to serve the live dashboard (default port: 8080).
 //!
 //! Usage:
 //!   cargo run -p approval_workflow
 //!   cargo run -p approval_workflow -- --jsonl /tmp/traces.jsonl
 //!   cargo run -p approval_workflow -- --postgres postgres://user:pass@localhost/db
 //!   cargo run -p approval_workflow -- --parallel
+//!   cargo run -p approval_workflow -- --dashboard 8080
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,6 +30,8 @@ use tianshu_observe::{
     dataset::{llm_dataset, step_dataset, workflow_dataset},
     CompositeObserver, InMemoryObserver, JsonlObserver,
 };
+
+use tianshu_dashboard::DashboardServer;
 
 use approval_workflow::register_workflows;
 
@@ -77,6 +81,10 @@ async fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let use_postgres = args.windows(2).any(|w| w[0] == "--postgres");
     let use_parallel = args.iter().any(|a| a == "--parallel");
+    let dashboard_port: Option<u16> = args
+        .windows(2)
+        .find(|w| w[0] == "--dashboard")
+        .and_then(|w| w[1].parse().ok());
 
     let (case_store, state_store): (Arc<dyn CaseStore>, Arc<dyn StateStore>) = if use_postgres {
         #[cfg(feature = "postgres")]
@@ -133,6 +141,14 @@ async fn main() -> Result<()> {
     } else {
         memory_obs.clone()
     };
+
+    // ── Dashboard (optional) ──────────────────────────────────────────────────
+    if let Some(port) = dashboard_port {
+        let dashboard = DashboardServer::new(case_store.clone(), memory_obs.clone())
+            .with_port(port);
+        tokio::spawn(dashboard.serve());
+        info!("Dashboard: http://127.0.0.1:{port}");
+    }
 
     // Wire up graceful shutdown — Ctrl+C or SIGTERM stops the tick loop after
     // the current tick finishes (in-flight workflows are not abandoned).

@@ -13,3 +13,4 @@ pub mod server;
 pub mod types;
 
 pub use server::DashboardServer;
+pub use types::{CaseRow, StatsResponse};

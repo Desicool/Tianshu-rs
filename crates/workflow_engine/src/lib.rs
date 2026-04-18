@@ -37,8 +37,8 @@ pub use llm::{
 };
 pub use llm_resilient::ResilientLlmProvider;
 pub use observe::{
-    observe_llm_call, LlmCallRecord, ObservedLlmProvider, Observer, RetryRecord, StepRecord,
-    ToolCallRecord, WorkflowRecord,
+    observe_llm_call, LlmCallRecord, ObservedLlmProvider, Observer, ProbeOutcome, ProbeRecord,
+    RetryRecord, StepRecord, ToolCallRecord, WorkflowRecord,
 };
 pub use poll::{IntentRouterV2, PollEvaluator, PollMatch, ResourceFetcher};
 pub use registry::WorkflowRegistry;
@@ -47,8 +47,8 @@ pub use session::Session;
 pub use spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
 pub use stage::{run_stages, StageBase, StageKey, StageOutcome};
 pub use store::{
-    CaseStore, InMemoryCaseStore, InMemorySessionStore, InMemoryStateStore, SessionStateEntry,
-    SessionStore, StateEntry, StateStore,
+    CaseFilter, CaseStore, InMemoryCaseStore, InMemorySessionStore, InMemoryStateStore,
+    SessionStateEntry, SessionStore, StateEntry, StateStore,
 };
 pub use token::{CharTokenCounter, ContextConfig, TokenCounter};
 pub use tool::{Tool, ToolRegistry, ToolSafety};

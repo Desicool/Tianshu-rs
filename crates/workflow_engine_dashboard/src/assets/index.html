@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tianshu Dashboard</title>
+<style>
+  :root {
+    --bg:         #0f172a;
+    --surface:    #1e293b;
+    --border:     #334155;
+    --text:       #e2e8f0;
+    --muted:      #94a3b8;
+    --green:      #22c55e;
+    --green-dim:  #166534;
+    --amber:      #f59e0b;
+    --amber-dim:  #78350f;
+    --slate:      #64748b;
+    --slate-dim:  #1e293b;
+    --blue:       #3b82f6;
+    --red:        #ef4444;
+    --radius:     8px;
+    --font:       'Inter', system-ui, sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header h1 { font-size: 16px; font-weight: 600; letter-spacing: .02em; }
+  header h1 span { color: var(--blue); }
+  #refresh-status { font-size: 12px; color: var(--muted); }
+  main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+  /* Error banner */
+  #error-banner {
+    display: none;
+    background: #7f1d1d;
+    border: 1px solid #ef4444;
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    margin-bottom: 20px;
+    color: #fca5a5;
+    font-size: 13px;
+  }
+
+  /* KPI cards */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+  }
+  .kpi-card .label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 8px; }
+  .kpi-card .value { font-size: 28px; font-weight: 700; line-height: 1; }
+  .kpi-card.green .value { color: var(--green); }
+  .kpi-card.amber .value { color: var(--amber); }
+  .kpi-card.slate .value { color: var(--slate); }
+  .kpi-card.blue  .value { color: var(--blue); }
+
+  /* Stats panel */
+  .stats-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .stats-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+  .stats-title { font-size: 15px; font-weight: 600; }
+  .period-tabs { display: flex; gap: 4px; }
+  .period-tab {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .period-tab.active, .period-tab:hover {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: #fff;
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+  }
+  .stat-item .stat-label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .stat-item .stat-value { font-size: 18px; font-weight: 600; color: var(--text); }
+  .stat-item .bar-bg {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .stat-item .bar-fill {
+    height: 100%;
+    background: var(--blue);
+    border-radius: 3px;
+    transition: width .4s ease;
+  }
+
+  /* Cases table */
+  .table-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .table-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .table-title { font-size: 15px; font-weight: 600; }
+  .table-controls { display: flex; gap: 10px; align-items: center; }
+  select, button {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  select:focus, button:focus { outline: 2px solid var(--blue); }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 500;
+  }
+  tbody tr { border-bottom: 1px solid var(--border); }
+  tbody tr:last-child { border-bottom: none; }
+  tbody td { padding: 10px 16px; vertical-align: top; }
+  tbody tr:hover td { background: rgba(255,255,255,.02); }
+
+  /* State badges */
+  .badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .badge-running  { background: var(--green-dim);  color: var(--green); }
+  .badge-waiting  { background: var(--amber-dim);  color: var(--amber); }
+  .badge-finished { background: var(--slate-dim);  color: var(--slate); }
+
+  /* Case key chip */
+  .case-key-chip {
+    font-family: 'Fira Mono', 'Cascadia Code', monospace;
+    font-size: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    cursor: pointer;
+    transition: background .15s;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block;
+  }
+  .case-key-chip:hover { background: var(--border); }
+  .case-key-chip[data-copied="true"] { color: var(--green); border-color: var(--green); }
+
+  /* Row expansion */
+  details { }
+  summary { list-style: none; cursor: pointer; color: var(--blue); font-size: 12px; }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: '▶ '; font-size: 10px; }
+  details[open] summary::before { content: '▼ '; }
+  .detail-body {
+    margin-top: 8px;
+    padding: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .detail-body pre {
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--text);
+    font-family: 'Fira Mono', monospace;
+    font-size: 11px;
+  }
+  .detail-row { display: flex; gap: 8px; margin-bottom: 4px; }
+  .detail-row .dk { color: var(--muted); min-width: 100px; }
+
+  /* Pagination */
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .pagination button { padding: 4px 12px; }
+  .pagination button:disabled { opacity: .4; cursor: not-allowed; }
+
+  @media (max-width: 900px) {
+    .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>Tianshu</span> Dashboard</h1>
+  <span id="refresh-status">Loading…</span>
+</header>
+
+<main>
+  <div id="error-banner"></div>
+
+  <!-- KPI row -->
+  <div class="kpi-row">
+    <div class="kpi-card green">
+      <div class="label">Running</div>
+      <div class="value" id="kpi-running">—</div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="label">Waiting</div>
+      <div class="value" id="kpi-waiting">—</div>
+    </div>
+    <div class="kpi-card slate">
+      <div class="label">Finished (window)</div>
+      <div class="value" id="kpi-finished">—</div>
+    </div>
+    <div class="kpi-card blue">
+      <div class="label">Completion Rate</div>
+      <div class="value" id="kpi-rate">—</div>
+    </div>
+  </div>
+
+  <!-- Stats panel -->
+  <div class="stats-panel">
+    <div class="stats-header">
+      <span class="stats-title">Performance Metrics</span>
+      <div class="period-tabs">
+        <button class="period-tab active" data-window="1d" onclick="setWindow('1d')">1d</button>
+        <button class="period-tab" data-window="3d" onclick="setWindow('3d')">3d</button>
+        <button class="period-tab" data-window="7d" onclick="setWindow('7d')">7d</button>
+      </div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-label">Avg Duration</div>
+        <div class="stat-value" id="stat-avg">—</div>
+        <div class="bar-bg"><div class="bar-fill" id="bar-avg" style="width:0%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">P50 Duration</div>
+        <div class="stat-value" id="stat-p50">—</div>
+        <div class="bar-bg"><div class="bar-fill" id="bar-p50" style="width:0%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">P99 Duration</div>
+        <div class="stat-value" id="stat-p99">—</div>
+        <div class="bar-bg"><div class="bar-fill" id="bar-p99" style="width:0%"></div></div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Avg Probe Time</div>
+        <div class="stat-value" id="stat-probe">—</div>
+        <div class="bar-bg"><div class="bar-fill" id="bar-probe" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cases table -->
+  <div class="table-panel">
+    <div class="table-header">
+      <span class="table-title">Active Workflows</span>
+      <div class="table-controls">
+        <select id="state-filter" onchange="onFilterChange()">
+          <option value="active">Active (all)</option>
+          <option value="running">Running</option>
+          <option value="waiting">Waiting</option>
+          <option value="finished">Finished</option>
+        </select>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Case Key</th>
+          <th>Workflow</th>
+          <th>State</th>
+          <th>Age</th>
+          <th>Session</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody id="cases-tbody">
+        <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:32px">Loading…</td></tr>
+      </tbody>
+    </table>
+    <div class="pagination">
+      <span id="pagination-info"></span>
+      <button id="btn-prev" onclick="prevPage()" disabled>← Prev</button>
+      <button id="btn-next" onclick="nextPage()">Next →</button>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let refreshSecs = 5;
+let countdown = 5;
+let countdownTimer = null;
+let refreshTimer = null;
+let currentWindow = '1d';
+let currentOffset = 0;
+const PAGE_SIZE = 20;
+let totalCases = 0;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    const cfg = await fetchJson('/api/config');
+    refreshSecs = cfg.refresh_secs || 5;
+  } catch(e) { /* use defaults */ }
+  await refreshAll();
+  startCountdown();
+}
+
+// ── Fetch helpers ─────────────────────────────────────────────────────────────
+async function fetchJson(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${url}`);
+  return r.json();
+}
+
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.style.display = 'block';
+  el.textContent = '⚠ ' + msg;
+}
+function clearError() {
+  document.getElementById('error-banner').style.display = 'none';
+}
+
+// ── Refresh ───────────────────────────────────────────────────────────────────
+async function refreshAll() {
+  try {
+    clearError();
+    const stateFilter = document.getElementById('state-filter').value;
+    const [cases, stats] = await Promise.all([
+      fetchJson(`/api/cases?state=${stateFilter}&limit=${PAGE_SIZE}&offset=${currentOffset}`),
+      fetchJson(`/api/stats?window=${currentWindow}`)
+    ]);
+    renderStats(stats);
+    renderCases(cases);
+  } catch(e) {
+    showError(e.message);
+  }
+}
+
+// ── Stats rendering ───────────────────────────────────────────────────────────
+function renderStats(s) {
+  document.getElementById('kpi-running').textContent  = s.running_count;
+  document.getElementById('kpi-waiting').textContent  = s.waiting_count;
+  document.getElementById('kpi-finished').textContent = s.finished_count;
+  document.getElementById('kpi-rate').textContent     = (s.completion_rate * 100).toFixed(1) + '%';
+
+  const maxDur = Math.max(s.avg_duration_ms, s.p99_duration_ms, 1);
+
+  function fmtMs(ms) {
+    if (ms < 1000) return ms.toFixed(0) + ' ms';
+    return (ms / 1000).toFixed(2) + ' s';
+  }
+
+  document.getElementById('stat-avg').textContent   = fmtMs(s.avg_duration_ms);
+  document.getElementById('stat-p50').textContent   = fmtMs(s.p50_duration_ms);
+  document.getElementById('stat-p99').textContent   = fmtMs(s.p99_duration_ms);
+  document.getElementById('stat-probe').textContent = fmtMs(s.avg_probe_ms);
+
+  document.getElementById('bar-avg').style.width   = Math.min(100, s.avg_duration_ms / maxDur * 100) + '%';
+  document.getElementById('bar-p50').style.width   = Math.min(100, s.p50_duration_ms / maxDur * 100) + '%';
+  document.getElementById('bar-p99').style.width   = Math.min(100, s.p99_duration_ms / maxDur * 100) + '%';
+  document.getElementById('bar-probe').style.width = Math.min(100, s.avg_probe_ms / maxDur * 100) + '%';
+}
+
+// ── Cases rendering ───────────────────────────────────────────────────────────
+function stateBadge(state) {
+  return `<span class="badge badge-${state}">${state}</span>`;
+}
+
+function fmtAge(secs) {
+  if (secs < 60) return secs + 's';
+  if (secs < 3600) return Math.floor(secs / 60) + 'm ' + (secs % 60) + 's';
+  return Math.floor(secs / 3600) + 'h ' + Math.floor((secs % 3600) / 60) + 'm';
+}
+
+function renderCases(data) {
+  totalCases = data.total;
+  const tbody = document.getElementById('cases-tbody');
+  if (!data.items || data.items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:32px">No cases found</td></tr>';
+    updatePagination();
+    return;
+  }
+
+  tbody.innerHTML = data.items.map(c => {
+    const chipId = 'chip-' + Math.random().toString(36).slice(2);
+    const hasDetail = c.session_id || c.resource_data;
+    const detailContent = hasDetail ? `
+      <div class="detail-row"><span class="dk">session_id</span><span>${escHtml(c.session_id || '')}</span></div>
+      ${c.parent_key ? `<div class="detail-row"><span class="dk">parent_key</span><span>${escHtml(c.parent_key)}</span></div>` : ''}
+      ${c.child_count ? `<div class="detail-row"><span class="dk">children</span><span>${c.child_count}</span></div>` : ''}
+      ${c.resource_data ? `<div class="detail-row"><span class="dk">resource_data</span></div><pre>${escHtml(JSON.stringify(c.resource_data, null, 2))}</pre>` : ''}
+    ` : '<em>No extra data</em>';
+
+    return `<tr>
+      <td><span class="case-key-chip" id="${chipId}" onclick="copyKey('${chipId}','${escHtml(c.case_key)}')" title="Click to copy">${escHtml(c.case_key)}</span></td>
+      <td>${escHtml(c.workflow_code)}</td>
+      <td>${stateBadge(c.state)}</td>
+      <td>${fmtAge(c.age_secs)}</td>
+      <td style="color:var(--muted);font-size:12px">${escHtml(c.session_id || '')}</td>
+      <td>
+        <details>
+          <summary>expand</summary>
+          <div class="detail-body">${detailContent}</div>
+        </details>
+      </td>
+    </tr>`;
+  }).join('');
+
+  updatePagination();
+}
+
+function copyKey(chipId, key) {
+  navigator.clipboard.writeText(key).catch(() => {});
+  const el = document.getElementById(chipId);
+  if (!el) return;
+  el.setAttribute('data-copied', 'true');
+  setTimeout(() => el.removeAttribute('data-copied'), 2000);
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ── Pagination ────────────────────────────────────────────────────────────────
+function updatePagination() {
+  const start = totalCases === 0 ? 0 : currentOffset + 1;
+  const end = Math.min(currentOffset + PAGE_SIZE, totalCases);
+  document.getElementById('pagination-info').textContent =
+    totalCases > 0 ? `${start}–${end} of ${totalCases}` : '0 results';
+  document.getElementById('btn-prev').disabled = currentOffset === 0;
+  document.getElementById('btn-next').disabled = currentOffset + PAGE_SIZE >= totalCases;
+}
+
+function prevPage() {
+  if (currentOffset > 0) {
+    currentOffset = Math.max(0, currentOffset - PAGE_SIZE);
+    refreshAll();
+  }
+}
+
+function nextPage() {
+  if (currentOffset + PAGE_SIZE < totalCases) {
+    currentOffset += PAGE_SIZE;
+    refreshAll();
+  }
+}
+
+function onFilterChange() {
+  currentOffset = 0;
+  refreshAll();
+}
+
+// ── Window selector ───────────────────────────────────────────────────────────
+function setWindow(w) {
+  currentWindow = w;
+  document.querySelectorAll('.period-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.window === w);
+  });
+  refreshAll();
+}
+
+// ── Countdown + auto-refresh ──────────────────────────────────────────────────
+function startCountdown() {
+  countdown = refreshSecs;
+  clearInterval(countdownTimer);
+  clearTimeout(refreshTimer);
+
+  countdownTimer = setInterval(() => {
+    if (document.hidden) {
+      document.getElementById('refresh-status').textContent = 'Paused (tab hidden)';
+      return;
+    }
+    countdown--;
+    document.getElementById('refresh-status').textContent = `Refreshes in ${countdown}s`;
+    if (countdown <= 0) {
+      clearInterval(countdownTimer);
+      refreshAll().then(startCountdown);
+    }
+  }, 1000);
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

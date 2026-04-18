@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 
 use crate::case::{Case, ExecutionState};
 use crate::context::WorkflowContext;
-use crate::observe::Observer;
+use crate::observe::{Observer, ProbeOutcome, ProbeRecord};
 use crate::poll::{PollEvaluator, ResourceFetcher};
 use crate::registry::WorkflowRegistry;
 use crate::session::Session;
@@ -253,13 +253,37 @@ impl SchedulerV2 {
                 }
             };
 
+            let workflow_code = case.workflow_code.clone();
             let mut ctx =
                 WorkflowContext::new(case, Arc::clone(&case_store), Arc::clone(&state_store));
             if let Some(obs) = &self.observer {
                 ctx.set_observer(Arc::clone(obs));
             }
 
-            match wf.run(&mut ctx).await {
+            let t0 = std::time::Instant::now();
+            let probe_result = wf.run(&mut ctx).await;
+            let duration_ms = t0.elapsed().as_millis() as u64;
+
+            // Emit probe record to observer
+            if let Some(obs) = &self.observer {
+                let (outcome, poll_count) = match &probe_result {
+                    Ok(WorkflowResult::Waiting(polls)) => (ProbeOutcome::StillWaiting, polls.len()),
+                    Ok(WorkflowResult::Continue) => (ProbeOutcome::Resumed, 0),
+                    Ok(WorkflowResult::Finished(_, _)) => (ProbeOutcome::Finished, 0),
+                    Err(e) => (ProbeOutcome::Error(e.to_string()), 0),
+                };
+                let record = ProbeRecord {
+                    case_key: case_key.clone(),
+                    workflow_code: workflow_code.clone(),
+                    duration_ms,
+                    poll_count,
+                    outcome,
+                    timestamp: chrono::Utc::now(),
+                };
+                obs.on_probe(&record).await;
+            }
+
+            match probe_result {
                 Ok(WorkflowResult::Waiting(polls)) => {
                     if !polls.is_empty() {
                         probe_results.push(WaitingProbeResult {

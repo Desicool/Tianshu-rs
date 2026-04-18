@@ -3,8 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use async_trait::async_trait;
+use std::collections::VecDeque;
 use std::sync::RwLock;
-use tianshu::observe::{LlmCallRecord, Observer, StepRecord, WorkflowRecord};
+use tianshu::observe::{LlmCallRecord, Observer, ProbeRecord, StepRecord, WorkflowRecord};
+
+const MAX_PROBE_RECORDS: usize = 10_000;
 
 /// In-memory observer that accumulates all records for programmatic access.
 ///
@@ -24,6 +27,7 @@ pub struct InMemoryObserver {
     steps: RwLock<Vec<StepRecord>>,
     workflows: RwLock<Vec<WorkflowRecord>>,
     llm_calls: RwLock<Vec<LlmCallRecord>>,
+    probes: RwLock<VecDeque<ProbeRecord>>,
 }
 
 impl InMemoryObserver {
@@ -46,6 +50,11 @@ impl InMemoryObserver {
         self.llm_calls.read().unwrap().clone()
     }
 
+    /// Returns all collected probe records (up to the cap of 10,000).
+    pub fn probe_records(&self) -> Vec<ProbeRecord> {
+        self.probes.read().unwrap().iter().cloned().collect()
+    }
+
     /// Returns step records for a specific case (across all ticks).
     pub fn step_records_for_case(&self, case_key: &str) -> Vec<StepRecord> {
         self.steps
@@ -62,6 +71,7 @@ impl InMemoryObserver {
         self.steps.write().unwrap().clear();
         self.workflows.write().unwrap().clear();
         self.llm_calls.write().unwrap().clear();
+        self.probes.write().unwrap().clear();
     }
 }
 
@@ -77,5 +87,13 @@ impl Observer for InMemoryObserver {
 
     async fn on_llm_call(&self, record: &LlmCallRecord) {
         self.llm_calls.write().unwrap().push(record.clone());
+    }
+
+    async fn on_probe(&self, record: &ProbeRecord) {
+        let mut guard = self.probes.write().unwrap();
+        if guard.len() >= MAX_PROBE_RECORDS {
+            guard.pop_front();
+        }
+        guard.push_back(record.clone());
     }
 }

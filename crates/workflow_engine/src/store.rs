@@ -8,8 +8,23 @@ use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::RwLock;
 
-use crate::case::Case;
+use crate::case::{Case, ExecutionState};
 use crate::session::Session;
+
+// ── CaseFilter ───────────────────────────────────────────────────────────────
+
+/// Filter parameters for listing cases.
+///
+/// All fields are optional; an all-`None` filter returns all cases.
+#[derive(Debug, Clone, Default)]
+pub struct CaseFilter {
+    pub execution_state: Option<ExecutionState>,
+    pub created_after: Option<DateTime<Utc>>,
+    pub created_before: Option<DateTime<Utc>>,
+    pub updated_after: Option<DateTime<Utc>>,
+    pub limit: Option<usize>,
+    pub offset: Option<usize>,
+}
 
 // ── CaseStore ────────────────────────────────────────────────────────────────
 
@@ -27,6 +42,16 @@ pub trait CaseStore: Send + Sync {
 
     /// List all cases belonging to a session.
     async fn get_by_session(&self, session_id: &str) -> Result<Vec<Case>>;
+
+    /// List cases matching the given filter. Default impl returns an error.
+    async fn list(&self, _filter: CaseFilter) -> Result<Vec<Case>> {
+        Err(anyhow::anyhow!("list not supported by this CaseStore"))
+    }
+
+    /// Count cases matching the given filter. Default impl returns an error.
+    async fn count(&self, _filter: CaseFilter) -> Result<u64> {
+        Err(anyhow::anyhow!("count not supported by this CaseStore"))
+    }
 
     /// Optional: create tables / collections / indexes on first use.
     async fn setup(&self) -> Result<()> {
@@ -177,6 +202,79 @@ impl CaseStore for InMemoryCaseStore {
             .cloned()
             .collect();
         Ok(result)
+    }
+
+    async fn list(&self, filter: CaseFilter) -> Result<Vec<Case>> {
+        let guard = self.cases.read().unwrap();
+        let mut result: Vec<Case> = guard
+            .values()
+            .filter(|c| {
+                if let Some(ref state) = filter.execution_state {
+                    if c.execution_state != *state {
+                        return false;
+                    }
+                }
+                if let Some(after) = filter.created_after {
+                    if c.created_at <= after {
+                        return false;
+                    }
+                }
+                if let Some(before) = filter.created_before {
+                    if c.created_at >= before {
+                        return false;
+                    }
+                }
+                if let Some(after) = filter.updated_after {
+                    if c.updated_at <= after {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect();
+
+        // Sort by created_at for stable ordering
+        result.sort_by_key(|c| c.created_at);
+
+        let offset = filter.offset.unwrap_or(0);
+        let result: Vec<Case> = result.into_iter().skip(offset).collect();
+        let result: Vec<Case> = match filter.limit {
+            Some(limit) => result.into_iter().take(limit).collect(),
+            None => result,
+        };
+        Ok(result)
+    }
+
+    async fn count(&self, filter: CaseFilter) -> Result<u64> {
+        let guard = self.cases.read().unwrap();
+        let count = guard
+            .values()
+            .filter(|c| {
+                if let Some(ref state) = filter.execution_state {
+                    if c.execution_state != *state {
+                        return false;
+                    }
+                }
+                if let Some(after) = filter.created_after {
+                    if c.created_at <= after {
+                        return false;
+                    }
+                }
+                if let Some(before) = filter.created_before {
+                    if c.created_at >= before {
+                        return false;
+                    }
+                }
+                if let Some(after) = filter.updated_after {
+                    if c.updated_at <= after {
+                        return false;
+                    }
+                }
+                true
+            })
+            .count() as u64;
+        Ok(count)
     }
 }
 

@@ -9,7 +9,7 @@ use tokio_postgres::Row;
 use tracing::{debug, info};
 
 use tianshu::case::{Case, ExecutionState};
-use tianshu::store::CaseStore;
+use tianshu::store::{CaseFilter, CaseStore};
 
 pub struct PostgresCaseStore {
     pool: Pool,
@@ -132,6 +132,72 @@ impl CaseStore for PostgresCaseStore {
         rows.iter()
             .map(Self::row_to_case)
             .collect::<Result<Vec<_>>>()
+    }
+
+    async fn list(&self, filter: CaseFilter) -> Result<Vec<Case>> {
+        let client = self.pool.get().await?;
+
+        // Build a parameterized WHERE clause.
+        // We use the pattern: col = $n OR $n IS NULL  for optional params.
+        // Params order: $1=state, $2=created_after, $3=created_before, $4=updated_after,
+        //               $5=limit (i64), $6=offset (i64)
+        let state_str: Option<String> = filter.execution_state.as_ref().map(|s| s.to_string());
+        let limit_i64: Option<i64> = filter.limit.map(|l| l as i64);
+        let offset_i64: i64 = filter.offset.unwrap_or(0) as i64;
+
+        let rows = client
+            .query(
+                r#"
+                SELECT * FROM wf_cases
+                WHERE ($1::text IS NULL OR execution_state = $1)
+                  AND ($2::timestamptz IS NULL OR created_at > $2)
+                  AND ($3::timestamptz IS NULL OR created_at < $3)
+                  AND ($4::timestamptz IS NULL OR updated_at > $4)
+                ORDER BY created_at ASC
+                LIMIT $5
+                OFFSET $6
+                "#,
+                &[
+                    &state_str,
+                    &filter.created_after,
+                    &filter.created_before,
+                    &filter.updated_after,
+                    &limit_i64,
+                    &offset_i64,
+                ],
+            )
+            .await?;
+
+        rows.iter()
+            .map(Self::row_to_case)
+            .collect::<Result<Vec<_>>>()
+    }
+
+    async fn count(&self, filter: CaseFilter) -> Result<u64> {
+        let client = self.pool.get().await?;
+
+        let state_str: Option<String> = filter.execution_state.as_ref().map(|s| s.to_string());
+
+        let row = client
+            .query_one(
+                r#"
+                SELECT COUNT(*)::bigint FROM wf_cases
+                WHERE ($1::text IS NULL OR execution_state = $1)
+                  AND ($2::timestamptz IS NULL OR created_at > $2)
+                  AND ($3::timestamptz IS NULL OR created_at < $3)
+                  AND ($4::timestamptz IS NULL OR updated_at > $4)
+                "#,
+                &[
+                    &state_str,
+                    &filter.created_after,
+                    &filter.created_before,
+                    &filter.updated_after,
+                ],
+            )
+            .await?;
+
+        let count: i64 = row.get(0);
+        Ok(count as u64)
     }
 
     async fn setup(&self) -> Result<()> {

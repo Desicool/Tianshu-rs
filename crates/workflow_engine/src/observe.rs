@@ -104,6 +104,35 @@ pub struct LlmCallRecord {
     pub error: Option<String>,
 }
 
+// ── ProbeOutcome / ProbeRecord ────────────────────────────────────────────────
+
+/// The outcome of probing a waiting workflow for its poll predicates.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ProbeOutcome {
+    /// The workflow is still waiting (returned `WorkflowResult::Waiting`).
+    StillWaiting,
+    /// The workflow woke up (returned `WorkflowResult::Continue`).
+    Resumed,
+    /// The workflow finished during the probe (returned `WorkflowResult::Finished`).
+    Finished,
+    /// The workflow returned an error during the probe.
+    Error(String),
+}
+
+/// Record emitted after each waiting-workflow probe during a scheduler tick.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProbeRecord {
+    pub case_key: String,
+    pub workflow_code: String,
+    /// How long the probe took.
+    pub duration_ms: u64,
+    /// Number of predicates in the `Waiting` vec; 0 for all other outcomes.
+    pub poll_count: usize,
+    pub outcome: ProbeOutcome,
+    pub timestamp: DateTime<Utc>,
+}
+
 // ── Observer trait ────────────────────────────────────────────────────────────
 
 /// Pluggable sink for workflow observability events.
@@ -155,6 +184,9 @@ pub trait Observer: Send + Sync {
     async fn on_retry(&self, record: &RetryRecord) {
         let _ = record;
     }
+
+    /// Called after each waiting-workflow probe in the scheduler tick.
+    async fn on_probe(&self, _record: &ProbeRecord) {}
 
     /// Flush any buffered writes. Called by `WorkflowContext::finish()`.
     /// Default is a no-op; buffered implementations (e.g. JSONL) should override.

@@ -35,6 +35,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tianshu",
+ "tianshu-dashboard",
  "tianshu-llm-openai",
  "tianshu-observe",
  "tianshu-postgres",

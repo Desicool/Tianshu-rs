@@ -144,8 +144,8 @@ async fn main() -> Result<()> {
 
     // ── Dashboard (optional) ──────────────────────────────────────────────────
     if let Some(port) = dashboard_port {
-        let dashboard = DashboardServer::new(case_store.clone(), memory_obs.clone())
-            .with_port(port);
+        let dashboard =
+            DashboardServer::new(case_store.clone(), memory_obs.clone()).with_port(port);
         tokio::spawn(dashboard.serve());
         info!("Dashboard: http://127.0.0.1:{port}");
     }
@@ -328,6 +328,12 @@ async fn main() -> Result<()> {
 
     if let Some(path) = &jsonl_path {
         info!("Full traces written to: {}", path);
+    }
+
+    // Keep the process alive so the dashboard can continue serving.
+    if let Some(port) = dashboard_port {
+        info!("Demo complete. Dashboard still serving at http://127.0.0.1:{port} — press Ctrl+C to exit.");
+        tokio::signal::ctrl_c().await?;
     }
 
     Ok(())

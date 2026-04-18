@@ -88,8 +88,9 @@ impl StreamingLlmProvider for OpenAiProvider {
                 match parse_sse_chunk(&line) {
                     None => {}
                     Some(SseChunk::TextDelta(s)) if !s.is_empty() => {
-                        if tx.send(LlmStreamEvent::TextDelta(s)).await.is_err() {
-                            return Ok(()); // receiver dropped
+                        match tx.send(LlmStreamEvent::TextDelta(s)).await {
+                            Ok(()) => {}
+                            Err(_) => return Ok(()), // receiver dropped
                         }
                     }
                     Some(SseChunk::TextDelta(_)) => {}

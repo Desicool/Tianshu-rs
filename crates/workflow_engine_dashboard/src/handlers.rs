@@ -90,7 +90,7 @@ pub async fn get_cases(
                 .await
                 .unwrap_or_default();
             running.extend(waiting);
-            running.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+            running.sort_by_key(|b| std::cmp::Reverse(b.created_at));
             let total = running.len();
             let items: Vec<CaseRow> = running
                 .into_iter()

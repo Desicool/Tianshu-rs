@@ -179,3 +179,114 @@ impl ManagedConversation {
         Ok(())
     }
 }
+
+/// Agent-aware compaction strategy. Summarizes the prefix of the conversation
+/// into a structured summary that preserves agent-specific context.
+///
+/// Unlike `LlmSummaryCompaction` (generic text summary), this prompts the LLM
+/// to specifically preserve agent role, task, decisions, tool outcomes, and
+/// spawned child status — the information an agent needs to resume work.
+pub struct AgentCompaction {
+    pub llm: Arc<dyn LlmProvider>,
+    pub model: Option<String>,
+    /// Number of recent messages to keep verbatim (default: 4).
+    pub preserve_recent: usize,
+}
+
+impl AgentCompaction {
+    pub fn new(llm: Arc<dyn LlmProvider>) -> Self {
+        Self {
+            llm,
+            model: None,
+            preserve_recent: 4,
+        }
+    }
+
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
+        self
+    }
+
+    pub fn with_preserve_recent(mut self, n: usize) -> Self {
+        self.preserve_recent = n;
+        self
+    }
+}
+
+#[async_trait]
+impl CompactionStrategy for AgentCompaction {
+    async fn compact(
+        &self,
+        messages: &[LlmMessage],
+        target_tokens: u32,
+        counter: &dyn TokenCounter,
+    ) -> Result<Vec<LlmMessage>> {
+        let len = messages.len();
+        let preserve = self.preserve_recent.min(len);
+        let split = len - preserve;
+
+        if split == 0 {
+            return Ok(messages.to_vec());
+        }
+
+        let prefix = &messages[..split];
+        let recent = messages[split..].to_vec();
+
+        // Check if prefix even needs summarizing
+        let prefix_tokens = counter.count_messages(prefix);
+        if prefix_tokens + counter.count_messages(&recent) <= target_tokens {
+            return Ok(messages.to_vec());
+        }
+
+        // Serialize prefix for the summary prompt
+        let prefix_text: String = prefix
+            .iter()
+            .map(|m| format!("[{}]: {}", m.role, m.content))
+            .collect::<Vec<_>>()
+            .join("\n\n");
+
+        let summary_prompt = format!(
+            "Summarize the following agent conversation history. Your summary will replace this \
+history so the agent can continue working without losing critical context.\n\n\
+Preserve ALL of the following that appear in the conversation:\n\
+- The agent's role and current task objective\n\
+- Key decisions made and their reasoning\n\
+- Important tool call outcomes (what was called, what it returned, success/failure)\n\
+- Any child agents spawned and their status\n\
+- Commitments, constraints, or requirements identified\n\
+- Current state of the task: what is done, what remains\n\n\
+Be concise but complete. Do not omit decisions or tool outcomes.\n\n\
+Conversation history to summarize:\n{prefix_text}"
+        );
+
+        let model = self
+            .model
+            .clone()
+            .unwrap_or_else(|| "gpt-4o-mini".to_string());
+        let req = LlmRequest {
+            model,
+            system_prompt: None,
+            messages: vec![LlmMessage {
+                role: "user".to_string(),
+                content: summary_prompt,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            temperature: Some(0.0),
+            max_tokens: Some(1024),
+            tools: None,
+        };
+
+        let response = self.llm.complete(req).await?;
+        let summary = response.content;
+
+        let mut result = vec![LlmMessage {
+            role: "user".to_string(),
+            content: format!("[Conversation summary — earlier history compacted]\n{summary}"),
+            tool_calls: None,
+            tool_call_id: None,
+        }];
+        result.extend(recent);
+        Ok(result)
+    }
+}

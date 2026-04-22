@@ -93,6 +93,9 @@ impl BaseWorkflow for AgentWorkflowInstance {
         // Execute one tick
         let result = agent_impl.act(&mut agent_ctx).await?;
 
+        // Tick-boundary save: persist any dirty conversation state.
+        agent_ctx.save_conversation_if_dirty().await?;
+
         Ok(result)
     }
 }

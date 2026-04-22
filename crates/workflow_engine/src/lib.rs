@@ -26,11 +26,12 @@ pub mod workflow;
 
 // Re-exports
 pub use agent::{Agent, AgentId, Capabilities, CapabilityRestriction};
-pub use agent_context::{AgentContext, AgentHandle, AgentSpawnConfig};
+pub use agent_context::{AgentContext, AgentHandle, AgentSpawnConfig, PersistentConversation};
 pub use agent_workflow::{AgentOutcome, AgentWorkflow, BaseAgent};
 pub use case::{make_case, Case, ExecutionState};
 pub use compact::{
-    CompactionStrategy, LlmSummaryCompaction, ManagedConversation, TruncationCompaction,
+    AgentCompaction, CompactionStrategy, LlmSummaryCompaction, ManagedConversation,
+    TruncationCompaction,
 };
 pub use context::WorkflowContext;
 pub use engine::{

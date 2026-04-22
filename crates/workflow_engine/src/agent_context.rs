@@ -9,15 +9,80 @@ use uuid::Uuid;
 
 use crate::agent::{Agent, AgentId, Capabilities, CapabilityRestriction};
 use crate::case::Case;
-use crate::compact::ManagedConversation;
+use crate::compact::{CompactionStrategy, ManagedConversation, TruncationCompaction};
 use crate::context::WorkflowContext;
-use crate::llm::{LlmProvider, LlmRequest};
+use crate::llm::{LlmMessage, LlmProvider, LlmRequest};
 use crate::observe::{AgentCompleteRecord, AgentMessageRecord, AgentSpawnRecord};
 use crate::retry::RetryPolicy;
 use crate::spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
 use crate::store::{AgentMessage, AgentMessageStore, AgentStore};
+use crate::token::{CharTokenCounter, ContextConfig, TokenCounter};
 use crate::tool::ToolRegistry;
 use crate::tool_loop::{ToolLoopConfig, ToolLoopResult};
+
+/// A persistent conversation that survives across ticks.
+///
+/// Stored in the agent's case state under key `"wf_agent_conv"`.
+/// The dirty flag prevents unnecessary saves.
+pub struct PersistentConversation {
+    managed: ManagedConversation,
+    dirty: bool,
+}
+
+impl PersistentConversation {
+    const STATE_KEY: &'static str = "wf_agent_conv";
+
+    /// Load from StateStore. Returns an empty conversation if no prior state exists.
+    pub async fn load(
+        wf_ctx: &mut WorkflowContext,
+        context_config: ContextConfig,
+        compaction: Arc<dyn CompactionStrategy>,
+        counter: Arc<dyn TokenCounter>,
+    ) -> Result<Self> {
+        let messages: Vec<LlmMessage> = wf_ctx.get_state(Self::STATE_KEY, vec![]).await?;
+
+        let mut managed = ManagedConversation::new(context_config, counter, compaction);
+        for msg in messages {
+            managed.push(msg);
+        }
+
+        Ok(Self {
+            managed,
+            dirty: false,
+        })
+    }
+
+    /// Save to StateStore if dirty.
+    pub async fn save(&mut self, wf_ctx: &mut WorkflowContext) -> Result<()> {
+        if !self.dirty {
+            return Ok(());
+        }
+        let messages = self.managed.messages().to_vec();
+        wf_ctx.set_state(Self::STATE_KEY, messages).await?;
+        self.dirty = false;
+        Ok(())
+    }
+
+    /// Save immediately, regardless of dirty flag.
+    pub async fn force_save(&mut self, wf_ctx: &mut WorkflowContext) -> Result<()> {
+        let messages = self.managed.messages().to_vec();
+        wf_ctx.set_state(Self::STATE_KEY, messages).await?;
+        self.dirty = false;
+        Ok(())
+    }
+
+    pub fn managed(&mut self) -> &mut ManagedConversation {
+        &mut self.managed
+    }
+
+    pub fn mark_dirty(&mut self) {
+        self.dirty = true;
+    }
+
+    pub fn is_dirty(&self) -> bool {
+        self.dirty
+    }
+}
 
 /// Configuration for spawning a child agent.
 pub struct AgentSpawnConfig {
@@ -50,6 +115,8 @@ pub struct AgentContext<'a> {
     tool_registry: Arc<ToolRegistry>,
     message_store: Arc<dyn AgentMessageStore>,
     agent_store: Arc<dyn AgentStore>,
+    /// Lazy-loaded persistent conversation; `None` until first `converse()` call.
+    conversation: Option<PersistentConversation>,
 }
 
 impl<'a> AgentContext<'a> {
@@ -66,6 +133,7 @@ impl<'a> AgentContext<'a> {
             tool_registry,
             message_store,
             agent_store,
+            conversation: None,
         }
     }
 
@@ -345,6 +413,104 @@ impl<'a> AgentContext<'a> {
 
     pub fn managed_conversation(&mut self) -> Option<&mut ManagedConversation> {
         self.wf_ctx.managed_conversation()
+    }
+
+    // ── Persistent conversation ───────────────────────────────────────────────
+
+    /// Run a persistent conversation turn.
+    ///
+    /// Loads prior conversation history on first call, appends the user message,
+    /// compacts if needed (with immediate save on compaction), calls the LLM with
+    /// the agent's scoped tools, and appends all new messages from the tool loop.
+    ///
+    /// The conversation is saved at tick boundary by `AgentWorkflowInstance::run()`.
+    /// Pass `model` explicitly since `LlmRequest` requires it.
+    pub async fn converse(
+        &mut self,
+        user_content: &str,
+        llm: &dyn LlmProvider,
+        model: &str,
+        system_prompt: Option<&str>,
+        config: &ToolLoopConfig,
+    ) -> Result<String> {
+        // 1. Lazy-load conversation
+        if self.conversation.is_none() {
+            let conv = PersistentConversation::load(
+                self.wf_ctx,
+                ContextConfig::default(),
+                Arc::new(TruncationCompaction { preserve_recent: 4 }),
+                Arc::new(CharTokenCounter),
+            )
+            .await?;
+            self.conversation = Some(conv);
+        }
+
+        // 2. Append user message and compact if needed.
+        //    We do this in a block to release the borrow on self.conversation
+        //    before we need to borrow self.wf_ctx and self.tool_registry.
+        let (messages, old_len, compacted) = {
+            let conv = self.conversation.as_mut().unwrap();
+            conv.managed().push(LlmMessage {
+                role: "user".to_string(),
+                content: user_content.to_string(),
+                tool_calls: None,
+                tool_call_id: None,
+            });
+            conv.mark_dirty();
+
+            // 3. Compact if needed — save immediately since compaction is lossy.
+            let compacted = conv.managed().compact_if_needed().await?;
+
+            let messages = conv.managed().messages().to_vec();
+            let old_len = messages.len();
+            (messages, old_len, compacted)
+        };
+
+        // If compaction fired, force-save now so the compacted state is durable
+        // before the LLM call. We release the conv borrow first (it ended with the block above)
+        // so we can mutably borrow self.wf_ctx.
+        if compacted {
+            let conv = self.conversation.as_mut().unwrap();
+            conv.force_save(self.wf_ctx).await?;
+        }
+
+        // 4. Build tool-aware LLM request from current conversation history.
+        let scoped =
+            crate::tool::ScopedToolRegistry::new(&self.tool_registry, &self.agent.capabilities);
+        let agent_id = self.agent.agent_id.clone();
+        let observer = self.wf_ctx.observer();
+
+        let request = LlmRequest {
+            model: model.to_string(),
+            system_prompt: system_prompt.map(|s| s.to_string()),
+            messages,
+            temperature: None,
+            max_tokens: None,
+            tools: None, // tool loop sets this internally
+        };
+
+        // 5. Run tool loop.
+        let result = crate::tool_loop::run_agent_tool_loop(
+            llm, request, &scoped, config, observer, &agent_id,
+        )
+        .await?;
+
+        // 6. Append new messages (from index old_len onward) to the persistent conversation.
+        let conv = self.conversation.as_mut().unwrap();
+        for msg in result.messages.iter().skip(old_len) {
+            conv.managed().push(msg.clone());
+        }
+        conv.mark_dirty();
+
+        Ok(result.final_text)
+    }
+
+    /// Save conversation to StateStore if dirty (called at tick boundary).
+    pub async fn save_conversation_if_dirty(&mut self) -> Result<()> {
+        if let Some(conv) = &mut self.conversation {
+            conv.save(self.wf_ctx).await?;
+        }
+        Ok(())
     }
 
     // ── Completion ────────────────────────────────────────────────────────────

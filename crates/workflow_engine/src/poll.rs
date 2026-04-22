@@ -8,6 +8,9 @@ use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use tracing::{debug, info, warn};
 
+use crate::agent::AgentId;
+use crate::store::AgentMessageStore;
+
 use crate::llm::{LlmMessage, LlmProvider, LlmRequest};
 use crate::workflow::PollPredicate;
 
@@ -157,6 +160,63 @@ impl IntentRouterV2 {
         }
 
         Ok(None)
+    }
+}
+
+// ── CompositeResourceFetcher ──────────────────────────────────────────────────
+
+/// Tries multiple `ResourceFetcher` implementations in order.
+/// Returns the first non-None result.
+pub struct CompositeResourceFetcher {
+    fetchers: Vec<Arc<dyn ResourceFetcher>>,
+}
+
+impl CompositeResourceFetcher {
+    pub fn new(fetchers: Vec<Arc<dyn ResourceFetcher>>) -> Self {
+        Self { fetchers }
+    }
+}
+
+#[async_trait]
+impl ResourceFetcher for CompositeResourceFetcher {
+    async fn fetch(&self, resource_type: &str, resource_id: &str) -> Result<Option<JsonValue>> {
+        for fetcher in &self.fetchers {
+            if let Some(v) = fetcher.fetch(resource_type, resource_id).await? {
+                return Ok(Some(v));
+            }
+        }
+        Ok(None)
+    }
+}
+
+// ── AgentMessageFetcher ───────────────────────────────────────────────────────
+
+/// Handles `resource_type == "agent_message"` poll predicates.
+/// `resource_id` is the receiving agent's ID.
+/// Returns `Some(messages_json)` when there are unconsumed messages, `None` otherwise.
+pub struct AgentMessageFetcher {
+    store: Arc<dyn AgentMessageStore>,
+}
+
+impl AgentMessageFetcher {
+    pub fn new(store: Arc<dyn AgentMessageStore>) -> Self {
+        Self { store }
+    }
+}
+
+#[async_trait]
+impl ResourceFetcher for AgentMessageFetcher {
+    async fn fetch(&self, resource_type: &str, resource_id: &str) -> Result<Option<JsonValue>> {
+        if resource_type != "agent_message" {
+            return Ok(None);
+        }
+        let agent_id = AgentId::new(resource_id);
+        let messages = self.store.receive(&agent_id).await?;
+        if messages.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(serde_json::to_value(&messages)?))
+        }
     }
 }
 

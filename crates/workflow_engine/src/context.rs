@@ -73,6 +73,11 @@ impl WorkflowContext {
         self.observer = Some(observer);
     }
 
+    /// Returns a reference to the observer, if one has been attached.
+    pub fn observer(&self) -> Option<&dyn Observer> {
+        self.observer.as_deref()
+    }
+
     /// Returns all step records accumulated in this tick.
     pub fn step_records(&self) -> &[StepRecord] {
         &self.step_records

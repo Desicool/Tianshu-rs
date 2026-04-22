@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 pub mod agent;
+pub mod agent_context;
+pub mod agent_workflow;
 pub mod case;
 pub mod compact;
 pub mod context;
@@ -24,6 +26,8 @@ pub mod workflow;
 
 // Re-exports
 pub use agent::{Agent, AgentId, Capabilities, CapabilityRestriction};
+pub use agent_context::{AgentContext, AgentHandle, AgentSpawnConfig};
+pub use agent_workflow::{AgentOutcome, AgentWorkflow, BaseAgent};
 pub use case::{make_case, Case, ExecutionState};
 pub use compact::{
     CompactionStrategy, LlmSummaryCompaction, ManagedConversation, TruncationCompaction,
@@ -43,7 +47,10 @@ pub use observe::{
     ObservedLlmProvider, Observer, ProbeOutcome, ProbeRecord, RetryRecord, StepRecord,
     ToolCallRecord, WorkflowRecord,
 };
-pub use poll::{IntentRouterV2, PollEvaluator, PollMatch, ResourceFetcher};
+pub use poll::{
+    AgentMessageFetcher, CompositeResourceFetcher, IntentRouterV2, PollEvaluator, PollMatch,
+    ResourceFetcher,
+};
 pub use registry::WorkflowRegistry;
 pub use retry::{with_retry, ErrorClass, RetryContext, RetryPolicy};
 pub use session::Session;
@@ -56,5 +63,5 @@ pub use store::{
 };
 pub use token::{CharTokenCounter, ContextConfig, TokenCounter};
 pub use tool::{ScopedToolRegistry, Tool, ToolRegistry, ToolSafety};
-pub use tool_loop::{run_tool_loop, ToolLoopConfig, ToolLoopResult};
+pub use tool_loop::{run_agent_tool_loop, run_tool_loop, ToolLoopConfig, ToolLoopResult};
 pub use workflow::{BaseWorkflow, PollPredicate, WorkflowResult};

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+pub mod agent;
 pub mod case;
 pub mod compact;
 pub mod context;
@@ -22,6 +23,7 @@ pub mod tool_loop;
 pub mod workflow;
 
 // Re-exports
+pub use agent::{Agent, AgentId, Capabilities, CapabilityRestriction};
 pub use case::{make_case, Case, ExecutionState};
 pub use compact::{
     CompactionStrategy, LlmSummaryCompaction, ManagedConversation, TruncationCompaction,
@@ -37,8 +39,9 @@ pub use llm::{
 };
 pub use llm_resilient::ResilientLlmProvider;
 pub use observe::{
-    observe_llm_call, LlmCallRecord, ObservedLlmProvider, Observer, ProbeOutcome, ProbeRecord,
-    RetryRecord, StepRecord, ToolCallRecord, WorkflowRecord,
+    observe_llm_call, AgentCompleteRecord, AgentMessageRecord, AgentSpawnRecord, LlmCallRecord,
+    ObservedLlmProvider, Observer, ProbeOutcome, ProbeRecord, RetryRecord, StepRecord,
+    ToolCallRecord, WorkflowRecord,
 };
 pub use poll::{IntentRouterV2, PollEvaluator, PollMatch, ResourceFetcher};
 pub use registry::WorkflowRegistry;
@@ -47,10 +50,11 @@ pub use session::Session;
 pub use spawn::{ChildHandle, ChildStatus, ChildrenResult, SpawnConfig};
 pub use stage::{run_stages, StageBase, StageKey, StageOutcome};
 pub use store::{
-    CaseFilter, CaseStore, InMemoryCaseStore, InMemorySessionStore, InMemoryStateStore,
+    AgentMessage, AgentMessageStore, AgentStore, CaseFilter, CaseStore, InMemoryAgentMessageStore,
+    InMemoryAgentStore, InMemoryCaseStore, InMemorySessionStore, InMemoryStateStore,
     SessionStateEntry, SessionStore, StateEntry, StateStore,
 };
 pub use token::{CharTokenCounter, ContextConfig, TokenCounter};
-pub use tool::{Tool, ToolRegistry, ToolSafety};
+pub use tool::{ScopedToolRegistry, Tool, ToolRegistry, ToolSafety};
 pub use tool_loop::{run_tool_loop, ToolLoopConfig, ToolLoopResult};
 pub use workflow::{BaseWorkflow, PollPredicate, WorkflowResult};

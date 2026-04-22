@@ -5,9 +5,12 @@
 use anyhow::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::RwLock;
 
+use crate::agent::{Agent, AgentId};
 use crate::case::{Case, ExecutionState};
 use crate::session::Session;
 
@@ -395,6 +398,125 @@ impl StateStore for InMemoryStateStore {
     async fn delete_by_session(&self, session_id: &str) -> Result<()> {
         let mut guard = self.session_entries.write().unwrap();
         guard.retain(|(sid, _), _| sid != session_id);
+        Ok(())
+    }
+}
+
+// ── Agent message ─────────────────────────────────────────────────────────────
+
+/// A durable message sent between agents.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMessage {
+    pub message_id: String,
+    pub from_agent_id: AgentId,
+    pub to_agent_id: AgentId,
+    pub payload: JsonValue,
+    pub created_at: DateTime<Utc>,
+    pub consumed: bool,
+}
+
+// ── AgentStore ────────────────────────────────────────────────────────────────
+
+/// Persistent store for Agent records.
+#[async_trait]
+pub trait AgentStore: Send + Sync {
+    async fn upsert(&self, agent: &Agent) -> Result<()>;
+    async fn get(&self, agent_id: &AgentId) -> Result<Option<Agent>>;
+    async fn get_by_session(&self, session_id: &str) -> Result<Vec<Agent>>;
+    async fn delete(&self, agent_id: &AgentId) -> Result<()>;
+}
+
+/// In-memory implementation of `AgentStore`.
+#[derive(Default)]
+pub struct InMemoryAgentStore {
+    agents: RwLock<HashMap<String, Agent>>,
+}
+
+#[async_trait]
+impl AgentStore for InMemoryAgentStore {
+    async fn upsert(&self, agent: &Agent) -> Result<()> {
+        self.agents
+            .write()
+            .unwrap()
+            .insert(agent.agent_id.0.clone(), agent.clone());
+        Ok(())
+    }
+
+    async fn get(&self, agent_id: &AgentId) -> Result<Option<Agent>> {
+        Ok(self.agents.read().unwrap().get(&agent_id.0).cloned())
+    }
+
+    async fn get_by_session(&self, session_id: &str) -> Result<Vec<Agent>> {
+        // NOTE: InMemory doesn't track session_id on agents directly.
+        // This is a full scan — acceptable for in-memory; Postgres impl uses an index.
+        // We return all agents whose backing case session would match.
+        // For now, return all agents (caller filters if needed).
+        let _ = session_id;
+        Ok(self.agents.read().unwrap().values().cloned().collect())
+    }
+
+    async fn delete(&self, agent_id: &AgentId) -> Result<()> {
+        self.agents.write().unwrap().remove(&agent_id.0);
+        Ok(())
+    }
+}
+
+// ── AgentMessageStore ─────────────────────────────────────────────────────────
+
+/// Durable store for inter-agent messages.
+#[async_trait]
+pub trait AgentMessageStore: Send + Sync {
+    async fn send(&self, message: &AgentMessage) -> Result<()>;
+    /// Returns all unconsumed messages addressed to `to`.
+    async fn receive(&self, to: &AgentId) -> Result<Vec<AgentMessage>>;
+    /// Mark messages as consumed (by message_id).
+    async fn acknowledge(&self, message_ids: &[String]) -> Result<()>;
+    /// Delete all messages to/from an agent (cleanup on agent deletion).
+    async fn delete_by_agent(&self, agent_id: &AgentId) -> Result<()>;
+}
+
+/// In-memory implementation of `AgentMessageStore`.
+#[derive(Default)]
+pub struct InMemoryAgentMessageStore {
+    messages: RwLock<HashMap<String, AgentMessage>>,
+}
+
+#[async_trait]
+impl AgentMessageStore for InMemoryAgentMessageStore {
+    async fn send(&self, message: &AgentMessage) -> Result<()> {
+        self.messages
+            .write()
+            .unwrap()
+            .insert(message.message_id.clone(), message.clone());
+        Ok(())
+    }
+
+    async fn receive(&self, to: &AgentId) -> Result<Vec<AgentMessage>> {
+        let msgs = self.messages.read().unwrap();
+        let mut result: Vec<AgentMessage> = msgs
+            .values()
+            .filter(|m| &m.to_agent_id == to && !m.consumed)
+            .cloned()
+            .collect();
+        result.sort_by_key(|m| m.created_at);
+        Ok(result)
+    }
+
+    async fn acknowledge(&self, message_ids: &[String]) -> Result<()> {
+        let mut msgs = self.messages.write().unwrap();
+        for id in message_ids {
+            if let Some(m) = msgs.get_mut(id) {
+                m.consumed = true;
+            }
+        }
+        Ok(())
+    }
+
+    async fn delete_by_agent(&self, agent_id: &AgentId) -> Result<()> {
+        self.messages
+            .write()
+            .unwrap()
+            .retain(|_, m| &m.from_agent_id != agent_id && &m.to_agent_id != agent_id);
         Ok(())
     }
 }

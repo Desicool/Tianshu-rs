@@ -21,6 +21,7 @@ fn step(step_name: &str, cached: bool, output: serde_json::Value) -> StepRecord 
         timestamp: Utc::now(),
         cached,
         error: None,
+        agent_id: None,
     }
 }
 
@@ -69,6 +70,7 @@ fn llm(model: &str) -> LlmCallRecord {
         duration_ms: 300,
         timestamp: Utc::now(),
         error: None,
+        agent_id: None,
     }
 }
 

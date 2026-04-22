@@ -223,3 +223,111 @@ impl Default for ToolRegistry {
         Self::new()
     }
 }
+
+// ── ScopedToolRegistry ────────────────────────────────────────────────────────
+
+use crate::agent::Capabilities;
+
+/// A capability-scoped view of a `ToolRegistry`.
+///
+/// Filters tool access based on the agent's `Capabilities`. Unauthorized tool
+/// calls return a permission-denied `ToolResult` instead of panicking.
+pub struct ScopedToolRegistry<'a> {
+    inner: &'a ToolRegistry,
+    capabilities: &'a Capabilities,
+}
+
+impl<'a> ScopedToolRegistry<'a> {
+    pub fn new(inner: &'a ToolRegistry, capabilities: &'a Capabilities) -> Self {
+        Self {
+            inner,
+            capabilities,
+        }
+    }
+
+    /// Look up a tool, returning None if denied by capabilities.
+    pub fn get(&self, name: &str) -> Option<Arc<dyn Tool>> {
+        if !self.capabilities.is_tool_allowed(name) {
+            return None;
+        }
+        self.inner.get(name)
+    }
+
+    /// Return LLM tool definitions for all tools allowed by this agent's capabilities.
+    pub fn to_llm_tools(&self) -> Vec<LlmTool> {
+        self.inner
+            .to_llm_tools()
+            .into_iter()
+            .filter(|t| self.capabilities.is_tool_allowed(&t.name))
+            .collect()
+    }
+
+    /// Execute a single tool call, respecting capability restrictions.
+    pub async fn execute_call(&self, call: &ToolCall) -> ToolResult {
+        if !self.capabilities.is_tool_allowed(&call.name) {
+            return ToolResult {
+                call_id: call.id.clone(),
+                content: format!(
+                    "permission denied: tool '{}' is not allowed for this agent",
+                    call.name
+                ),
+                is_error: true,
+            };
+        }
+        self.inner.execute_call(call).await
+    }
+
+    /// Execute multiple tool calls with concurrency, respecting capability restrictions.
+    /// Denied calls return a permission-denied error immediately without hitting the inner registry.
+    pub async fn execute_with_concurrency(
+        &self,
+        calls: &[ToolCall],
+        max_concurrency: usize,
+    ) -> Vec<(ToolResult, u64)> {
+        // Check for denied calls upfront. If any are denied, return errors for all denied
+        // and delegate the rest. Simpler: just run each through execute_call sequentially
+        // for denied ones (they're instant), and delegate the batch for allowed ones.
+        //
+        // For simplicity, split into: denied (immediate error) vs allowed (delegate to inner).
+        // Preserve order by tracking which slots are which.
+
+        if calls.is_empty() {
+            return vec![];
+        }
+
+        // Fast path: check if all are allowed — delegate entirely to inner
+        if calls
+            .iter()
+            .all(|c| self.capabilities.is_tool_allowed(&c.name))
+        {
+            return self
+                .inner
+                .execute_with_concurrency(calls, max_concurrency)
+                .await;
+        }
+
+        // Mixed: handle denied calls with immediate error, allowed calls via inner
+        let mut results = Vec::with_capacity(calls.len());
+        for call in calls {
+            if !self.capabilities.is_tool_allowed(&call.name) {
+                results.push((
+                    ToolResult {
+                        call_id: call.id.clone(),
+                        content: format!(
+                            "permission denied: tool '{}' is not allowed for this agent",
+                            call.name
+                        ),
+                        is_error: true,
+                    },
+                    0u64,
+                ));
+            } else {
+                let start = std::time::Instant::now();
+                let result = self.inner.execute_call(call).await;
+                let duration_ms = start.elapsed().as_millis() as u64;
+                results.push((result, duration_ms));
+            }
+        }
+        results
+    }
+}

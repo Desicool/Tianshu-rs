@@ -206,6 +206,7 @@ impl WorkflowContext {
                     timestamp,
                     cached: true,
                     error: None,
+                    agent_id: None,
                 };
                 self.step_records.push(record.clone());
                 if let Some(obs) = &self.observer {
@@ -235,6 +236,7 @@ impl WorkflowContext {
                     timestamp,
                     cached: false,
                     error: None,
+                    agent_id: None,
                 }
             }
             Err(e) => StepRecord {
@@ -247,6 +249,7 @@ impl WorkflowContext {
                 timestamp,
                 cached: false,
                 error: Some(e.to_string()),
+                agent_id: None,
             },
         };
 

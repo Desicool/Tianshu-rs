@@ -22,6 +22,7 @@ fn step(case_key: &str) -> StepRecord {
         timestamp: Utc::now(),
         cached: false,
         error: None,
+        agent_id: None,
     }
 }
 
@@ -70,6 +71,7 @@ fn llm_call(case_key: &str) -> LlmCallRecord {
         duration_ms: 50,
         timestamp: Utc::now(),
         error: None,
+        agent_id: None,
     }
 }
 

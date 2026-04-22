@@ -10,6 +10,7 @@ use serde_json::Value as JsonValue;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::agent::AgentId;
 use crate::llm::{LlmProvider, LlmRequest, LlmResponse, LlmUsage};
 
 // ── Data types ────────────────────────────────────────────────────────────────
@@ -33,6 +34,9 @@ pub struct StepRecord {
     /// `true` if the result was restored from a checkpoint (replay), `false` if freshly executed.
     pub cached: bool,
     pub error: Option<String>,
+    /// The agent that executed this step, if running in agent mode.
+    #[serde(default)]
+    pub agent_id: Option<AgentId>,
 }
 
 /// Record emitted when a workflow finishes via `ctx.finish()`.
@@ -72,6 +76,9 @@ pub struct ToolCallRecord {
     pub is_error: bool,
     pub duration_ms: u64,
     pub timestamp: DateTime<Utc>,
+    /// The agent that made this tool call, if running in agent mode.
+    #[serde(default)]
+    pub agent_id: Option<AgentId>,
 }
 
 /// Record of a retry attempt.
@@ -102,6 +109,9 @@ pub struct LlmCallRecord {
     pub duration_ms: u64,
     pub timestamp: DateTime<Utc>,
     pub error: Option<String>,
+    /// The agent that made this LLM call, if running in agent mode.
+    #[serde(default)]
+    pub agent_id: Option<AgentId>,
 }
 
 // ── ProbeOutcome / ProbeRecord ────────────────────────────────────────────────
@@ -130,6 +140,36 @@ pub struct ProbeRecord {
     /// Number of predicates in the `Waiting` vec; 0 for all other outcomes.
     pub poll_count: usize,
     pub outcome: ProbeOutcome,
+    pub timestamp: DateTime<Utc>,
+}
+
+// ── Agent observability records ───────────────────────────────────────────────
+
+/// Emitted when an agent spawns a child agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentSpawnRecord {
+    pub parent_agent_id: AgentId,
+    pub child_agent_id: AgentId,
+    pub child_role: String,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Emitted when an agent sends a message to another agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentMessageRecord {
+    pub message_id: String,
+    pub from_agent_id: AgentId,
+    pub to_agent_id: AgentId,
+    pub timestamp: DateTime<Utc>,
+}
+
+/// Emitted when an agent finishes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentCompleteRecord {
+    pub agent_id: AgentId,
+    pub role: String,
+    pub finished_type: String,
+    pub finished_description: String,
     pub timestamp: DateTime<Utc>,
 }
 
@@ -188,6 +228,15 @@ pub trait Observer: Send + Sync {
     /// Called after each waiting-workflow probe in the scheduler tick.
     async fn on_probe(&self, _record: &ProbeRecord) {}
 
+    /// Called when an agent spawns a child agent.
+    async fn on_agent_spawn(&self, _record: &AgentSpawnRecord) {}
+
+    /// Called when an agent sends a message to another agent.
+    async fn on_agent_message(&self, _record: &AgentMessageRecord) {}
+
+    /// Called when an agent finishes.
+    async fn on_agent_complete(&self, _record: &AgentCompleteRecord) {}
+
     /// Flush any buffered writes. Called by `WorkflowContext::finish()`.
     /// Default is a no-op; buffered implementations (e.g. JSONL) should override.
     async fn flush(&self) {}
@@ -234,6 +283,7 @@ pub async fn observe_llm_call(
             duration_ms,
             timestamp,
             error: None,
+            agent_id: None,
         },
         Err(e) => LlmCallRecord {
             case_key: case_key.to_string(),
@@ -245,6 +295,7 @@ pub async fn observe_llm_call(
             duration_ms,
             timestamp,
             error: Some(e.to_string()),
+            agent_id: None,
         },
     };
 
@@ -408,6 +459,7 @@ mod tests {
             timestamp: Utc::now(),
             cached: false,
             error: None,
+            agent_id: None,
         };
         let json = serde_json::to_string(&record).unwrap();
         let back: StepRecord = serde_json::from_str(&json).unwrap();
@@ -452,6 +504,7 @@ mod tests {
             duration_ms: 300,
             timestamp: Utc::now(),
             error: None,
+            agent_id: None,
         };
         let json = serde_json::to_string(&record).unwrap();
         let back: LlmCallRecord = serde_json::from_str(&json).unwrap();
@@ -570,6 +623,7 @@ mod tests {
             timestamp: Utc::now(),
             cached: false,
             error: None,
+            agent_id: None,
         };
         obs.on_step(&step).await; // must not panic
         obs.flush().await;

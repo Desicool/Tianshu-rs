@@ -112,6 +112,7 @@ pub async fn run_tool_loop(
                     is_error: result.is_error,
                     duration_ms: *duration_ms,
                     timestamp: Utc::now(),
+                    agent_id: None,
                 };
                 obs.on_tool_call(&record).await;
             }

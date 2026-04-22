@@ -23,6 +23,7 @@ fn make_step(case_key: &str, step_name: &str, cached: bool) -> StepRecord {
         timestamp: Utc::now(),
         cached,
         error: None,
+        agent_id: None,
     }
 }
 
@@ -71,6 +72,7 @@ fn make_llm(case_key: &str) -> LlmCallRecord {
         duration_ms: 200,
         timestamp: Utc::now(),
         error: None,
+        agent_id: None,
     }
 }
 

@@ -23,6 +23,7 @@ fn step() -> StepRecord {
         timestamp: Utc::now(),
         cached: false,
         error: None,
+        agent_id: None,
     }
 }
 
@@ -71,6 +72,7 @@ fn llm_call() -> LlmCallRecord {
         duration_ms: 200,
         timestamp: Utc::now(),
         error: None,
+        agent_id: None,
     }
 }
 
